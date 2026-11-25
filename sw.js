@@ -1,24 +1,27 @@
 /* Take A Map 試作：オフラインでも画面が開くようにするサービスワーカー
  * - アプリ本体（HTML/CSS/JS/アイコン）は最初に保存しておく
- * - 地図タイル（国土地理院）は一度表示した範囲だけ保存し、件数に上限をつける
+ * - 地図は Google Maps。Google の地図・タイル・場所の情報は保存しない（Google へのリクエストは横取りせず、そのままネットへ）
+ *   オフラインのときは、地図の所にだけ「地図を表示できません」と出る（js/gmap.js）
  * ファイルを変えたら VERSION の数字を上げる（古い保存が入れ替わる）
  */
-const VERSION = "v6";
+const VERSION = "v7";
 const APP_CACHE = "tam-app-" + VERSION;
 const IMG_CACHE = "tam-img-v1"; // 記事の写真（名前を変えない限り中身は変わらないので、保存を先に使う）
-const TILE_CACHE = "tam-tiles-v1";
-const TILE_MAX = 1500; // 保存するタイルの上限（1枚 数KB〜十数KB）
+const OLD_CACHES = ["tam-tiles-v1"]; // 前の版で保存していた国土地理院の地図タイル（もう使わないので消す）
+
+// Google のサーバー（地図の部品・タイル・画像）。ここへのリクエストはサービスワーカーで扱わない
+const isGoogle = (host) =>
+  /(^|\.)(googleapis\.com|gstatic\.com|googleusercontent\.com|google\.com|ggpht\.com)$/.test(host);
 
 const APP_FILES = [
   "./",
   "./index.html",
   "./manifest.json",
   "./css/style.css",
+  "./js/gmap.js",
   "./js/data.js",
   "./js/rebuild.js",
   "./js/app.js",
-  "./vendor/leaflet/leaflet.css",
-  "./vendor/leaflet/leaflet.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
 ];
@@ -76,39 +79,18 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith("tam-app-") && k !== APP_CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => (k.startsWith("tam-app-") && k !== APP_CACHE) || OLD_CACHES.includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
-async function trimTiles() {
-  const c = await caches.open(TILE_CACHE);
-  const keys = await c.keys();
-  for (let i = 0; i < keys.length - TILE_MAX; i++) await c.delete(keys[i]);
-}
-
 self.addEventListener("fetch", (e) => {
   const req = e.request;
-  if (req.method !== "GET") return;
   const url = new URL(req.url);
 
-  // 地図タイル：保存があればそれを使い、なければ取りに行って保存
-  if (url.hostname === "cyberjapandata.gsi.go.jp") {
-    e.respondWith(
-      caches.open(TILE_CACHE).then(async (c) => {
-        const hit = await c.match(req);
-        if (hit) return hit;
-        try {
-          const res = await fetch(req);
-          if (res.ok || res.type === "opaque") { c.put(req, res.clone()); trimTiles(); }
-          return res;
-        } catch (err) {
-          return new Response("", { status: 504 });
-        }
-      })
-    );
-    return;
-  }
+  // Google（地図・タイル・場所の情報）：横取りも保存もしない。ブラウザがそのままネットから取る
+  if (isGoogle(url.hostname)) return;
+  if (req.method !== "GET") return;
 
   // 記事の写真：保存があればそれを使い、なければ取りに行って保存
   if (url.origin === self.location.origin && url.pathname.includes("/images/")) {

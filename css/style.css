@@ -3,6 +3,7 @@
   --orange: #E86B45; --lime: #D8EE72; --blue: #56859C; --gray: #626E66;
   --line: #DFE4DC; --rust: #B94A28;
   --tab-h: 62px;
+  --map-b: 132px; /* 大きな地図の下のあき（下のシートの一番低い高さ） */
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; background: #E9E6DA; }
@@ -13,8 +14,17 @@ input, textarea, select { font: inherit; color: inherit; }
 #app { position: relative; max-width: 430px; height: 100dvh; margin: 0 auto; overflow: hidden; overflow: clip; background: var(--cream); box-shadow: 0 0 40px rgba(0,0,0,.12); }
 .view { position: absolute; inset: 0 0 var(--tab-h) 0; display: none; overflow-y: auto; background: var(--cream); isolation: isolate; }
 .view.active { display: block; }
-#view-map { overflow: hidden; }
-#map { position: absolute; inset: 0; background: #EEF0EA; }
+#view-map { overflow: hidden; background: #EEF0EA; }
+/* 地図は Google Maps。Google のロゴと出典が下のシートに隠れないよう、下をシートの一番低い高さだけあける（app.js の MAP_B と同じ） */
+#map { position: absolute; inset: 0 0 var(--map-b) 0; background: #EEF0EA; z-index: 0; }
+/* 地図が出せないとき（オフライン・APIキーが使えないアドレス）に、地図の所にだけ出すお知らせ */
+.map-off { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: #EEF0EA; color: var(--gray); font-size: 13px; text-align: center; line-height: 1.6; }
+.map-off span { max-width: 260px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.minimap { position: relative; background: #EEF0EA; }
+/* 地図の上に置くピン・吹き出し（js/gmap.js の HtmlMarker） */
+.gm-mk { position: absolute; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: pointer; }
+.gm-mk.gm-static { pointer-events: none; cursor: default; }
+.map-dot { width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 2px solid #123D2B; box-sizing: border-box; }
 
 /* 上の検索とタグ */
 .map-top { position: absolute; top: 0; left: 0; right: 0; z-index: 500; padding: max(10px, env(safe-area-inset-top)) 12px 6px; pointer-events: none; }
@@ -178,9 +188,6 @@ input, textarea, select { font: inherit; color: inherit; }
 .tabbar .plan-menu svg { width: 18px; height: 18px; stroke: var(--lime); stroke-width: 2; }
 .toast { position: absolute; left: 50%; bottom: calc(var(--tab-h) + 16px); transform: translateX(-50%) translateY(20px); background: var(--green); color: var(--paper); padding: 9px 16px; border-radius: 20px; font-size: 13px; opacity: 0; pointer-events: none; transition: all .25s; z-index: 2000; white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.leaflet-control-attribution { font-size: 9px !important; }
-.sheet-head .credit { margin-left: auto; font-size: 10px; white-space: nowrap; }
-.sheet-head .credit a { color: var(--gray); }
 .avatar.two { font-size: 10px; letter-spacing: -0.5px; }
 .avatar.lg.two { font-size: 20px; }
 .sheet-head { flex-wrap: wrap; row-gap: 0; }
@@ -380,8 +387,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .pin.fl + .pin-time { border-color: #2B7DE9; }
 .pin.fl.done + .pin-time, .pin.fl.dropped + .pin-time { border-color: #A9B2AC; color: var(--gray); }
 .pin-time.warn { background: #FCE9E2; color: var(--rust); border-color: var(--rust); }
-.leaflet-marker-icon { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-.leaflet-marker-icon.pressing .pin.num { transform: scale(1.25); transition: transform .45s ease; box-shadow: 0 0 0 6px rgba(232,107,69,.3), 0 1px 4px rgba(0,0,0,.35); }
+.gm-mk.pressing .pin.num { transform: scale(1.25); transition: transform .45s ease; box-shadow: 0 0 0 6px rgba(232,107,69,.3), 0 1px 4px rgba(0,0,0,.35); }
 
 /* 番号を選ぶ（長押しで開く） */
 .picker-back { position: absolute; inset: 0; z-index: 2000; background: rgba(18,30,24,.38); display: flex; align-items: flex-end; opacity: 0; transition: opacity .18s ease; }
@@ -461,13 +467,6 @@ button.mk-num { border: none; cursor: pointer; }
 
 /* 自分のマップ */
 
-/* 地図の設定（Google） */
-.gset .gset-state { margin: 8px 0; font-size: 13px; }
-.gset-err { color: var(--rust); }
-.gset-row { display: flex; gap: 8px; margin-bottom: 6px; }
-.gset-row .field { flex: 1; min-width: 0; }
-.g-logo { font-weight: 800; color: #4285F4; letter-spacing: -.2px; }
-
 /* ---- 並べ替え（スライドで入れ替え）・いまいる場所・組み直し（自分で選ぶ） ---- */
 .sort-shift { transition: transform .16s ease; }
 .sort-drag { position: relative; z-index: 5; box-shadow: 0 8px 22px rgba(0,0,0,.2); }
@@ -512,8 +511,7 @@ button.mk-num { border: none; cursor: pointer; }
 
 /* 自分のマップ：探すと同じ大きな地図。場所を押すと、下から引き出すシートで直す */
 .mm-full { position: absolute; inset: 0; overflow: hidden; background: #EEF0EA; }
-.mm-map { position: absolute; inset: 0; z-index: 0; }
-.mm-bar { display: flex; align-items: center; gap: 8px; }
+.mm-map { position: absolute; inset: 0 0 var(--map-b) 0; z-index: 0; }.mm-bar { display: flex; align-items: center; gap: 8px; }
 .mm-bar .stage-title { min-width: 0; }
 .mm-bar .stage-title span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mm-bar .demo-badge { background: var(--paper); box-shadow: 0 1px 4px rgba(0,0,0,.12); }

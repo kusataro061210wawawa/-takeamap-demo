@@ -9,9 +9,6 @@
   const writerById = Object.fromEntries(D.writers.map((w) => [w.id, w]));
   const recById = Object.fromEntries(D.records.map((r) => [r.id, r]));
   const RATING = { 3: "また行きたい", 2: "よかった", 1: "合わなかった" };
-  const TILE = "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png";
-  const ATTR = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">国土地理院</a>';
-  const CREDIT = `<small class="credit">地図：${ATTR}</small>`;
   const OMIYA = [35.9115, 139.6265];
   const KIND_BG = {
     "建築": ["#56859C", "#123D2B"], "ラーメン": ["#E86B45", "#8E3A1E"], "カフェ": ["#B08968", "#6F4E37"], "名所": ["#7F8C84", "#123D2B"],
@@ -138,56 +135,17 @@
   const GICON = '<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0114 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
   const gLink = (href, label, cls = "") => `<a class="gmap-link ${cls}" href="${href}" target="_blank" rel="noopener">${GICON}${esc(label)}</a>`;
 
-  /* 地図の下地：ふだんは国土地理院。マイページで Google の APIキー を入れると Google の地図に切り替えられる */
-  const GKEY_STORE = "tam-google-key";
-  const store = {
-    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
-    set(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* 保存できなくても動く */ } },
-  };
-  const google = { key: store.get(GKEY_STORE), session: null, state: "off" }; // off / loading / on / error
-  function tileLayer() {
-    if (google.session) {
-      return L.tileLayer(`https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${encodeURIComponent(google.session)}&key=${encodeURIComponent(google.key)}`,
-        { attribution: "地図データ ©Google", maxZoom: 20, minZoom: 5 });
-    }
-    return L.tileLayer(TILE, { attribution: ATTR, maxZoom: 18, minZoom: 5 });
-  }
-  const mapCredit = () => (google.session ? '<small class="credit"><span class="g-logo">Google</span> 地図データ ©Google</small>' : CREDIT);
-  // Map Tiles API のセッションを作る（キーは この端末のブラウザだけに保存）
-  async function startGoogle(key) {
-    google.key = key; google.state = "loading"; google.session = null;
-    try {
-      const res = await fetch("https://tile.googleapis.com/v1/createSession?key=" + encodeURIComponent(key), {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mapType: "roadmap", language: "ja-JP", region: "JP" }),
-      });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const j = await res.json();
-      if (!j.session) throw new Error("no session");
-      google.session = j.session; google.state = "on";
-      store.set(GKEY_STORE, key);
-      return true;
-    } catch (e) {
-      google.state = "error"; google.error = String(e.message || e);
-      return false;
-    }
-  }
-  function stopGoogle() { google.key = null; google.session = null; google.state = "off"; store.set(GKEY_STORE, null); }
-  // 下地を差し替える（探す・予定の大きな地図）
-  let baseLayer = null;
-  function resetBase() {
-    if (!map) return;
-    if (baseLayer) map.removeLayer(baseLayer);
-    baseLayer = tileLayer().addTo(map);
-    baseLayer.bringToBack();
-    map.setMaxZoom(google.session ? 20 : 18);
-    if (state.view === "map" || state.view === "plan") renderSheet();
-  }
+  /* 地図の下地：Google Maps（js/gmap.js）。Google の地図や店の情報は保存しない。
+     前の版でこの端末に入れた Map Tiles API のキーが残っていれば消す */
+  try { localStorage.removeItem("tam-google-key"); } catch (e) { /* なくてもよい */ }
+  // ピンの見た目：{ html, size, anchor }（anchor：地図の位置に合わせる、ピンの中の点）
   const PIN_SIZE = { fav: 26, official: 26, mine: 22, saved: 20, other: 16, num: 28 };
   function divPin(cls, inner, extra = "") {
     const n = PIN_SIZE[cls.split(" ")[0]] || 22;
-    return L.divIcon({ className: "", html: `<div class="pin ${cls}" style="${extra}">${inner || ""}</div>`, iconSize: [n, n], iconAnchor: [n / 2, n / 2], tooltipAnchor: [0, -n / 2] });
+    return { html: `<div class="pin ${cls}" style="${extra}">${inner || ""}</div>`, size: [n, n], anchor: [n / 2, n / 2] };
   }
+  // 大きな地図は、Google のロゴと出典が下のシートに隠れないよう、下をシートの一番低い高さ（132px）だけあけてある（css の --map-b と同じ）
+  const MAP_B = 132;
   // その場所について、いちばん読んでほしい記事（お気に入りの書き手 → 公式 → ほか、評価が高い順）
   function bestRecordFor(spotId) {
     let best = null;
@@ -209,23 +167,33 @@
   const lockN = (d) => d.lockN || 0;
   const numOf = (d, i) => (d.base || 0) + i + 1; // 画面に出す番号（組み直しは、たどっている予定の番号のまま）
   const editing = () => stage() === "make" || stage() === "redo";
+  // 地図は最初に開いたときに Google から読み込んで作る。読み込み中にもう一度呼ばれても、作るのは1回だけ
+  let mapLoading = null;
   function initMap() {
-    if (typeof L === "undefined") { $("#map").innerHTML = '<div class="empty">地図を読み込めませんでした。インターネットにつながっているか確認してください。</div>'; return; }
-    // 出典は下のシートに表示する（シートで隠れないように）
-    map = L.map("map", { zoomControl: false, attributionControl: false }).setView(OMIYA, 14);
-    baseLayer = tileLayer().addTo(map);
-    layer = L.layerGroup().addTo(map);
-    bubbleLayer = L.layerGroup().addTo(map);
-    map.on("zoomstart", () => bubbleLayer.clearLayers());
-    // 探す：動かしている間は一覧を薄くし、止まって少したってから、映っている範囲の記事に入れ替える
-    map.on("movestart", () => { if (stage() === "explore") { clearTimeout(areaTimer); $("#sheet-body").classList.add("waiting"); } });
-    map.on("moveend", () => { refreshBubbles(); if (stage() === "explore") scheduleArea(); });
+    if (map) return Promise.resolve(map);
+    if (!mapLoading) {
+      mapLoading = GM.create($("#map"), { center: OMIYA, zoom: 14 }).then((m) => {
+        mapLoading = null;
+        if (!m) return null; // オフラインなど：地図の所にだけお知らせが出る
+        map = m;
+        layer = m.group();
+        bubbleLayer = m.group();
+        m.on("zoomstart", () => bubbleLayer.clear());
+        // 探す：動かしている間は一覧を薄くし、止まって少したってから、映っている範囲の記事に入れ替える
+        m.on("movestart", () => { if (stage() === "explore") { clearTimeout(areaTimer); $("#sheet-body").classList.add("waiting"); } });
+        m.on("moveend", () => { refreshBubbles(); if (stage() === "explore") scheduleArea(); });
+        return m;
+      });
+    }
+    return mapLoading;
   }
   const topInset = () => $(".map-top").offsetHeight;
   function sheetPx() {
     const el = $("#sheet"), h = $("#view-map").clientHeight;
     return el.classList.contains("peek") ? 132 : el.classList.contains("half") ? h * 0.52 : h - 100;
   }
+  // 下のシートが地図に重なっている高さ（地図は下を MAP_B だけあけてある）
+  const sheetOver = () => Math.max(0, sheetPx() - MAP_B);
 
   /* 探す：地図に映っている範囲（上の検索・タグと、下のシートに隠れていない所） */
   let areaTimer = null, areaBounds = null;
@@ -234,9 +202,9 @@
     const size = map.getSize();
     if (!size.x || !size.y) return null;
     const top = Math.min(topInset(), size.y * 0.4);
-    const sheetH = $("#sheet").classList.contains("peek") ? 132 : size.y * 0.52;
-    const bottom = Math.max(top + 40, size.y - sheetH);
-    return L.latLngBounds(map.containerPointToLatLng([0, top]), map.containerPointToLatLng([size.x, bottom]));
+    const bottom = Math.max(top + 40, size.y - sheetOver());
+    const [n, w] = map.toLatLng({ x: 0, y: top }), [s, e] = map.toLatLng({ x: size.x, y: bottom });
+    return { contains: ([lat, lng]) => lat <= n && lat >= s && lng >= w && lng <= e };
   }
   function updateArea() {
     if (stage() !== "explore") return;
@@ -267,14 +235,13 @@
 
   // ピンを置き、吹き出しに使う情報を覚えておく
   function addPin(ll, icon, info, onClick, z = 0) {
-    const m = L.marker(ll, { icon, zIndexOffset: z }).addTo(layer);
-    if (onClick) m.on("click", onClick);
+    const m = layer.marker(ll, { ...icon, z, onClick });
     if (info) pinInfo.push({ ll, ...info });
     return m;
   }
   function drawMap(fit) {
     if (!map) return;
-    layer.clearLayers(); pinInfo = [];
+    layer.clear(); pinInfo = [];
     const st = stage();
     let pts = [];
     if (st === "explore") pts = drawRecords(false);
@@ -284,7 +251,7 @@
     refreshBubbles();
   }
   function fitTo(pts) {
-    map.fitBounds(L.latLngBounds(pts).pad(pts.length > 1 ? 0.12 : 0), { maxZoom: 16, paddingTopLeft: [24, topInset() + 16], paddingBottomRight: [24, sheetPx() + 16] });
+    map.fit(pts, { pad: pts.length > 1 ? 0.12 : 0, maxZoom: 16, top: topInset() + 16, left: 24, right: 24, bottom: sheetOver() + 16 });
   }
 
   // 記事のピンとルート（探す・つくる）
@@ -298,10 +265,10 @@
       const color = r.official ? "#E86B45" : fk ? w.color : "#A9B2AC";
       if (r.type === "route") {
         const strong = fk || r.official;
-        const line = L.polyline(r.spots.map((s) => [spotById[s.spot].lat, spotById[s.spot].lng]), {
-          color, weight: make ? 2.5 : strong ? 4 : 2.5, opacity: make ? 0.28 : strong ? 0.85 : 0.6, dashArray: r.official ? "6 6" : null, interactive: !make,
-        }).addTo(layer);
-        if (!make) line.on("click", () => openArticle(r.id));
+        layer.line(r.spots.map((s) => [spotById[s.spot].lat, spotById[s.spot].lng]), {
+          color, weight: make ? 2.5 : strong ? 4 : 2.5, opacity: make ? 0.28 : strong ? 0.85 : 0.6, dash: r.official ? "6 6" : null,
+          onClick: make ? null : () => openArticle(r.id),
+        });
       }
       r.spots.forEach((s) => {
         const sp = spotById[s.spot];
@@ -321,12 +288,12 @@
       if (inDraft.has(sp.id)) return; // 予定に入れた場所は番号のピンで出す
       const kind = saved ? "saved" : r.official ? "official" : fk ? "fav" : "other";
       const icon = kind === "saved" ? divPin("saved", "") : kind === "official" ? divPin("official", "公式") : kind === "fav" ? divPin("fav", esc(writerById[r.writer].name[0]), `background:${color}`) : divPin("other", "");
-      const m = addPin([sp.lat, sp.lng], icon, { half: PIN_SIZE[kind] / 2, prio: rank, sp, r, s }, () => (make ? toggleDraftSpot(sp.id) : openArticle(r.id)));
-      if (!make) m.bindTooltip(esc(sp.name), { direction: "top" });
+      if (!make) icon.title = sp.name;
+      addPin([sp.lat, sp.lng], icon, { half: PIN_SIZE[kind] / 2, prio: rank, sp, r, s }, () => (make ? toggleDraftSpot(sp.id) : openArticle(r.id)));
       if (!make && state.mode === "group") {
         const t = state.tag || Object.keys(sp.groupLikes || {})[0];
         const n = sp.groupLikes && sp.groupLikes[t];
-        if (n) L.marker([sp.lat, sp.lng], { icon: L.divIcon({ className: "", html: `<div class="pin-count">また行きたい ${n}人</div>`, iconSize: [0, 0], iconAnchor: [0, 0] }), interactive: false }).addTo(layer);
+        if (n) layer.marker([sp.lat, sp.lng], { html: `<div class="pin-count">また行きたい ${n}人</div>`, size: [0, 0], anchor: [0, 0], interactive: false });
       }
     });
     return pts;
@@ -335,10 +302,10 @@
   // 番号のピン。下に着く時刻を出す（warn = 着く時刻に開いていない）
   const TIME_H = 18; // 時刻のラベルの高さ（吹き出しと重ならないように使う）
   function numPin(n, time, cls = "", warn = false) {
-    return L.divIcon({
-      className: "", iconSize: [28, 28], iconAnchor: [14, 14], tooltipAnchor: [0, -14],
+    return {
+      size: [28, 28], anchor: [14, 14],
       html: `<div class="pin-num-wrap"><div class="pin num ${cls}">${n}</div>${time ? `<span class="pin-time ${warn ? "warn" : ""}">${time}着</span>` : ""}</div>`,
-    });
+    };
   }
 
   // 長押し（指でもマウスでも）。動いたら長押しにしない。長押しのあとに来るクリックは無視する
@@ -370,10 +337,10 @@
     // 組み直し：もう行った場所は薄く出す
     if (stage() === "redo") {
       const dl = state.redo.done.map((id) => [spotById[id].lat, spotById[id].lng]);
-      if (dl.length) L.polyline([...dl, ll[0]], { color: "#8A968E", weight: 3, dashArray: "2 7", opacity: 0.8, interactive: false }).addTo(layer);
+      if (dl.length) layer.line([...dl, ll[0]], { color: "#8A968E", weight: 3, dash: "2 7", opacity: 0.8 });
       state.redo.done.forEach((id, k) => addPin(dl[k], numPin(k + 1, "", "fl done"), { half: 14, prio: 1, sp: spotById[id], num: k + 1, fl: true }, null, 200));
     }
-    if (ll.length > 1) L.polyline(ll, { color: "#E86B45", weight: 4.5, opacity: 0.9, interactive: false }).addTo(layer);
+    if (ll.length > 1) layer.line(ll, { color: "#E86B45", weight: 4.5, opacity: 0.9 });
     stops.forEach((x, i) => {
       const b = bestRecordFor(x.spot), sp = spotById[x.spot], a = sch[i];
       const info = { half: 14, below: TIME_H, prio: 10, sp, r: b && b.r, s: b && b.s, num: numOf(d, i) };
@@ -517,14 +484,14 @@
       const pts = [];
       state.plans.forEach((p) => {
         const l = ll(p.stops); pts.push(...l);
-        if (l.length > 1) L.polyline(l, { color: "#123D2B", weight: 3, opacity: 0.4, dashArray: "4 6", interactive: false }).addTo(layer);
-        l.forEach((x) => L.circleMarker(x, { radius: 4, color: "#123D2B", weight: 2, fillColor: "#fff", fillOpacity: 1, interactive: false }).addTo(layer));
+        if (l.length > 1) layer.line(l, { color: "#123D2B", weight: 3, opacity: 0.4, dash: "4 6" });
+        l.forEach((x) => layer.marker(x, { html: '<div class="map-dot"></div>', size: [10, 10], anchor: [5, 5], interactive: false }));
       });
       return pts;
     }
     const pl = state.plan;
     const live = pl.stops.filter((s) => s.status !== "dropped");
-    if (live.length > 1) L.polyline(ll(live), { color: "#2B7DE9", weight: 4, dashArray: "2 8", opacity: 0.9, interactive: false }).addTo(layer);
+    if (live.length > 1) layer.line(ll(live), { color: "#2B7DE9", weight: 4, dash: "2 8", opacity: 0.9 });
     return pl.stops.map((s, i) => {
       const sp = spotById[s.spot], b = bestRecordFor(s.spot);
       const cls = s.status === "dropped" ? "fl dropped" : i < pl.cur ? "fl done" : i === pl.cur ? "fl now" : "fl";
@@ -538,9 +505,9 @@
   const BW = 196, BH = 62, BGAP = 9, BUBBLE_ZOOM = 15;
   function refreshBubbles() {
     if (!map || !bubbleLayer) return;
-    bubbleLayer.clearLayers();
+    bubbleLayer.clear();
     if (!$("#view-map").classList.contains("active")) return;
-    placeBubbles(map, bubbleLayer, pinInfo.map((p) => ({ ...p, b: mainBubble(p) })), topInset() + 4, map.getSize().y - sheetPx() - 4);
+    placeBubbles(map, bubbleLayer, pinInfo.map((p) => ({ ...p, b: mainBubble(p) })), topInset() + 4, map.getSize().y - sheetOver() - 4);
   }
   // 探す・つくる・たどる の吹き出しの中身
   function mainBubble(p) {
@@ -559,7 +526,7 @@
     const size = m.getSize();
     const hit = (a, b, mg = 0) => a.x < b.x + b.w + mg && b.x < a.x + a.w + mg && a.y < b.y + b.h + mg && b.y < a.y + a.h + mg;
     const pins = list.map((p) => {
-      const pt = m.latLngToContainerPoint(p.ll), h = p.half + 2;
+      const pt = m.toPoint(p.ll), h = p.half + 2;
       return { ...p, pt, box: { x: pt.x - h, y: pt.y - h, w: h * 2, h: h * 2 + (p.below || 0) } };
     }).filter((p) => p.pt.x > -40 && p.pt.x < size.x + 40 && p.pt.y > top - 40 && p.pt.y < bottom + 40);
     const placed = [];
@@ -591,8 +558,7 @@
         ${b.rating || b.who ? `<span class="bm">${b.rating ? ratingTag(b.rating) : ""}<span class="bw">${esc(b.who || "")}</span>${b.go ? `<span class="bgo">${esc(b.go)}</span>` : ""}</span>` : ""}
       </span>
     </div>`;
-    const mk = L.marker(p.ll, { icon: L.divIcon({ className: "bubble-icon", html, iconSize: [BW, BH], iconAnchor: anchor }), zIndexOffset: 3000 + (b.z || 0), keyboard: false }).addTo(lyr);
-    if (b.onClick) mk.on("click", b.onClick);
+    lyr.marker(p.ll, { cls: "bubble-icon", html, size: [BW, BH], anchor, z: 3000 + (b.z || 0), onClick: b.onClick || null });
   }
 
   /* 地図の上：探すは検索、つくる・たどるは切り替え */
@@ -649,7 +615,7 @@
     const favs = recs.filter((r) => !r.official && favKind(r.writer, r));
     const others = recs.filter((r) => !r.official && !favKind(r.writer, r));
     const label = state.mode === "fav" ? "お気に入り" : state.mode === "group" ? "同じ趣味の人たち" : "すべての人";
-    $("#sheet-head").innerHTML = `<b>${esc(state.tag || "すべて")}の記事</b><small>${areaBounds ? "この範囲 " : ""}${recs.length}件・${label}</small>${mapCredit()}`;
+    $("#sheet-head").innerHTML = `<b>${esc(state.tag || "すべて")}の記事</b><small>${areaBounds ? "この範囲 " : ""}${recs.length}件・${label}</small>`;
     let html = "";
     if (favs.length) html += `<div class="section-label">お気に入りの書き手</div>` + favs.map(recordCard).join("");
     if (others.length) html += `<div class="section-label">${state.mode === "group" ? "同じ趣味の記録が多い人たち" : "ほかの書き手"}</div>` + others.map(recordCard).join("");
@@ -724,7 +690,7 @@
   function renderMakeSheet() {
     const d = state.draft, sch = schedule(d.start, d.stops), n = sch.length;
     const span = n ? `${R.fmt(sch[0].arrive)}〜${R.fmt(sch[n - 1].depart)}` : "";
-    $("#sheet-head").innerHTML = `<b>予定をつくる</b><small>${n ? `${n}か所・${span}` : "場所を押して始める"}</small>${mapCredit()}`;
+    $("#sheet-head").innerHTML = `<b>予定をつくる</b><small>${n ? `${n}か所・${span}` : "場所を押して始める"}</small>`;
     if (!n) {
       $("#sheet-body").innerHTML = `<div class="mk-hint"><b>地図の場所を押すと、1、2、3…の順に予定に入ります</b>もう一度押すと外れます。地図を拡大すると吹き出しが出て、記事を読めます。「読む」の記事の「つくる」からは、書いた人のルートを先に入れられます。</div>`;
       return;
@@ -752,7 +718,7 @@
       ? (state.premium ? "有料会員：組み直しは無制限" : `おまかせを使ったので、この予定にすると今月の残りは${V.rebuildsLeft - 1}回（無料は月5回）`)
       : "自分で選ぶ組み直しは、回数に数えません";
     const cond = [state.closed.length && "臨時休業", state.rain && "雨", state.delay && `${state.delay}分の遅れ`].filter(Boolean);
-    $("#sheet-head").innerHTML = `<b>組み直す：行く場所を選ぶ</b><small>${n ? `このあと${n}か所・〜${R.fmt(sch[sch.length - 1].depart)}` : "このあとの予定がありません"}</small>${mapCredit()}`;
+    $("#sheet-head").innerHTML = `<b>組み直す：行く場所を選ぶ</b><small>${n ? `このあと${n}か所・〜${R.fmt(sch[sch.length - 1].depart)}` : "このあとの予定がありません"}</small>`;
     $("#sheet-body").innerHTML = `<div class="mk-hint"><b>地図の場所を押すと、いまの場所のあとに入ります</b>もう一度押すと外れます。順番は ≡ をつかんで上下にスライドするか、地図の番号を長押しして入れ替えます。${cond.length ? `<br>いまの状況：${cond.join("・")}` : ""}</div>
       <div class="redo-act">
         <button class="btn accent block" data-mk="redo-apply" ${n ? "" : "disabled"}>この予定にする</button>
@@ -768,7 +734,7 @@
   /* たどる：保存した予定の一覧 → 選ぶと、その予定の時間割・組み直し */
   function renderFollowSheet() {
     if (state.followList || !state.plan) {
-      $("#sheet-head").innerHTML = `<b>たどる</b><small>保存した予定 ${state.plans.length}件</small>${mapCredit()}`;
+      $("#sheet-head").innerHTML = `<b>たどる</b><small>保存した予定 ${state.plans.length}件</small>`;
       if (!state.plans.length) {
         $("#sheet-body").innerHTML = `<div class="empty">まだ保存した予定がありません。<br>「つくる」で場所をつなげて、名前を付けて保存すると、ここから選べます。<br><br><button class="btn primary" data-fl="make">つくるへ</button></div>`;
         return;
@@ -811,7 +777,7 @@
     if (state.delay) alert.push(`<b>予定より${state.delay}分遅れています</b>閉まる時間に間に合うように並べ直せます。`);
     const left = state.premium ? "無制限" : `今月の残り${V.rebuildsLeft}回`;
     const canRebuild = state.premium || V.rebuildsLeft > 0;
-    $("#sheet-head").innerHTML = `<b>${esc(pl.title)}</b><small>たどっています</small>${mapCredit()}`;
+    $("#sheet-head").innerHTML = `<b>${esc(pl.title)}</b><small>たどっています</small>`;
     $("#sheet-body").innerHTML = `<button class="link-btn back-list" data-fl="list">‹ ほかの予定を選ぶ</button>
       ${alert.map((a) => `<div class="alert">${a}</div>`).join("")}
       <div class="fl-where"><span>いまいる場所</span><div class="fl-where-row">${where}</div></div>
@@ -1152,16 +1118,18 @@
   function closePanels() { stack.length = 0; paint(); }
   const bar = (title) => `<div class="bar"><button class="back" aria-label="戻る">${ICON.back}</button><div class="title">${esc(title)}</div></div>`;
 
+  // 記事・書き手の小さな地図（2本指で動かせる）。オフラインのときは、この地図の所にだけお知らせが出る
   function miniMap(id, spots, numbered, color) {
-    if (typeof L === "undefined") return;
-    const m = L.map(id, { zoomControl: false, attributionControl: true, dragging: true, scrollWheelZoom: false });
-    tileLayer().addTo(m);
+    const el = document.getElementById(id);
     const pts = spots.map((s) => [s.lat, s.lng]);
-    if (numbered && pts.length > 1) L.polyline(pts, { color: color || "#E86B45", weight: 4, opacity: 0.85 }).addTo(m);
-    spots.forEach((s, i) => L.marker([s.lat, s.lng], { icon: divPin(s.mine ? "mine" : "fav", numbered ? String(i + 1) : "", s.mine ? "" : `background:${color || "#123D2B"}`) }).addTo(m));
-    if (pts.length === 1) m.setView(pts[0], 15); else m.fitBounds(L.latLngBounds(pts).pad(0.2));
-    panelMaps.push(m);
-    setTimeout(() => m.invalidateSize(), 280);
+    GM.create(el, { center: pts[0] || OMIYA, zoom: pts.length ? 15 : 12, gesture: "cooperative" }).then((m) => {
+      if (!m) return;
+      panelMaps.push(m);
+      const g = m.group();
+      if (numbered && pts.length > 1) g.line(pts, { color: color || "#E86B45", weight: 4, opacity: 0.85 });
+      spots.forEach((s, i) => g.marker([s.lat, s.lng], { ...divPin(s.mine ? "mine" : "fav", numbered ? String(i + 1) : "", s.mine ? "" : `background:${color || "#123D2B"}`), title: s.name }));
+      if (pts.length > 1) m.fit(pts, { pad: 0.2, maxZoom: 17 });
+    });
   }
 
   function openArticle(id) { showPanel((p) => renderArticle(p, id)); }
@@ -1518,13 +1486,12 @@
      sel：選んでいる場所（大きく出して、吹き出しもいちばん先に置く）。吹き出しの写真は、自分で入れた写真を先に使う */
   function myPins(lyr, filter, onPick, infos, sel) {
     const pts = [];
-    const pin = (cls, ll, key, on) => L.marker(ll, { icon: divPin(cls + (on ? " sel" : ""), ""), zIndexOffset: on ? 1000 : 0 }).addTo(lyr).on("click", () => onPick && onPick(key));
+    const pin = (cls, ll, key, on, title) => lyr.marker(ll, { ...divPin(cls + (on ? " sel" : ""), ""), z: on ? 1000 : 0, title: infos ? "" : title, onClick: onPick ? () => onPick(key) : null });
     if (filter !== "saved") state.myRecords.forEach((r) => r.spots.forEach((s, i) => {
       const ll = [s.lat, s.lng], key = `ms-${r.id}-${i}`, on = key === sel;
       pts.push(ll);
-      const m = pin("mine", ll, key, on);
-      if (!infos) m.bindTooltip(esc(s.name));
-      else infos.push({ ll, half: PIN_SIZE.mine / 2, prio: on ? 99 : 6, b: {
+      pin("mine", ll, key, on, s.name);
+      if (infos) infos.push({ ll, half: PIN_SIZE.mine / 2, prio: on ? 99 : 6, b: {
         cls: "is-mine" + (on ? " is-sel" : ""), z: on ? 500 : 0, name: s.name, title: "「" + r.title + "」", rating: s.rating,
         who: "自分の記録・" + visLabel(s.vis), go: on ? "" : "直す ›", photoUrl: (s.photos || [])[0], onClick: () => onPick && onPick(key),
       } });
@@ -1532,8 +1499,8 @@
     if (filter !== "rec") V.saved.forEach((x) => {
       const sp = spotById[x.spot], ll = [sp.lat, sp.lng], key = `sv-${x.spot}`, on = key === sel;
       pts.push(ll);
-      const m = pin("saved", ll, key, on);
-      if (!infos) { m.bindTooltip(esc(sp.name)); return; }
+      pin("saved", ll, key, on, sp.name);
+      if (!infos) return;
       const best = bestRecordFor(x.spot), w = best && writerById[best.r.writer], ph = best && stopPhotos(best.r, x.spot)[0];
       infos.push({ ll, half: PIN_SIZE.saved / 2, prio: on ? 99 : 5, b: {
         cls: "is-saved" + (on ? " is-sel" : ""), z: on ? 500 : 0, name: sp.name, title: x.memo ? "メモ：" + x.memo : best ? "「" + best.r.title + "」" : sp.kind,
@@ -1545,7 +1512,7 @@
   }
   const legend = `<div class="legend"><span><i class="lgd mine"></i>自分の記録</span><span><i class="lgd saved"></i>登録した場所</span></div>`;
 
-  let meMap = null;
+  let meMap = null, meTurn = 0;
   function renderMe() {
     const el = $("#view-me");
     if (meMap) { meMap.remove(); meMap = null; }
@@ -1570,39 +1537,21 @@
         ${state.myRecords.length ? "" : '<div class="small">まだ記録がありません。</div>'}
         ${state.myRecords.map((r) => `<div class="card"><h3 style="margin-top:0">${esc(r.title)}</h3><div class="meta"><span>${esc(r.date)}</span><span>${r.spots.length}か所</span></div>
           ${r.spots.map((s, i) => `<button class="me-spot" data-mm="ms-${r.id}-${i}">${(s.photos || []).length ? `<img class="thumb" src="${s.photos[0]}" alt="" style="width:100%;height:120px">` : ""}<span class="me-spot-top"><b>${esc(s.name)}</b><span class="me-spot-go">地図で直す ›</span></span><span>${ratingTag(s.rating)} <span class="small">${visLabel(s.vis)}${(s.photos || []).length ? `・写真${s.photos.length}枚` : ""}</span></span><span class="small">${esc(s.note)}</span></button>`).join("")}</div>`).join("")}
-        <div class="section-label">地図の設定（Google マップ）</div>
-        <div class="card gset">
-          <div class="small">記事・予定の「Google マップで開く」「行き方」は、キーなしでいつでも使えます。下は、アプリの中の地図そのものを Google の地図にする設定です。</div>
-          <div class="gset-state">いまの地図：<b>${google.session ? "Google の地図" : "国土地理院の地図"}</b>${google.state === "loading" ? "（切り替え中…）" : ""}${google.state === "error" ? `<span class="gset-err">（切り替えられませんでした：${esc(google.error || "")}）</span>` : ""}</div>
-          ${google.session
-            ? `<button class="btn ghost small" id="g-off">国土地理院の地図に戻す</button>`
-            : `<div class="gset-row"><input class="field" id="g-key" placeholder="Google Maps Platform の APIキー" autocomplete="off" spellcheck="false" value="${esc(google.key || "")}"><button class="btn primary small" id="g-on">使う</button></div>
-               <div class="small">Google Cloud で Map Tiles API を有効にした APIキー が必要です（利用料がかかる場合があります）。キーはこの端末のブラウザだけに保存し、Google から地図を受け取るときにだけ使います。公開ページに置くキーなので、Google Cloud でこのサイトのアドレスだけに使えるよう制限してください。</div>`}
-        </div>
         <div class="section-label">お気に入りの書き手</div>
         ${favs.map((w) => `<button class="card" data-writer="${w.id}"><div class="card-top">${avatar(w)}<b>${esc(w.name)}</b><span class="badge fav">お気に入り</span></div><div class="small" style="margin-top:4px">${esc(w.bio)}</div></button>`).join("")}
         ${tagFavs.map(({ w, t }) => `<button class="card" data-writer="${w.id}"><div class="card-top">${avatar(w)}<b>${esc(w.name)}</b><span class="badge tagfav">${esc(t.join("・"))}だけお気に入り</span></div></button>`).join("")}
       </div>`;
-    if (typeof L !== "undefined") {
-      // 見るだけの小さな地図。押すと自分のマップが開く
-      const m = L.map("mm-me", { zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false, boxZoom: false, keyboard: false });
-      tileLayer().addTo(m);
-      const pts = myPins(L.layerGroup().addTo(m), "all");
-      if (pts.length) m.fitBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 14 }); else m.setView(OMIYA, 12);
-      meMap = m; setTimeout(() => m.invalidateSize(), 50);
-    }
+    // 見るだけの小さな地図。押すと自分のマップが開く（オフラインのときは、この地図の所にだけお知らせが出る）
+    const meEl = $("#mm-me", el), myTurn = ++meTurn;
+    GM.create(meEl, { center: OMIYA, zoom: 12, gesture: "none" }).then((m) => {
+      if (!m) return;
+      if (myTurn !== meTurn) { m.remove(); return; } // 読み込んでいる間に描き直された
+      meMap = m;
+      const pts = myPins(m.group(), "all");
+      if (pts.length) m.fit(pts, { pad: 0.3, maxZoom: 14 });
+    });
     $("#open-mymap").addEventListener("click", () => openMyMap());
     $$("[data-mm]", el).forEach((b) => b.addEventListener("click", () => openMyMap(b.dataset.mm)));
-    const gon = $("#g-on", el), goff = $("#g-off", el);
-    if (gon) gon.addEventListener("click", async () => {
-      const key = $("#g-key", el).value.trim();
-      if (!key) { toast("APIキーを入れてください"); return; }
-      gon.disabled = true; toast("Google の地図に切り替えています…");
-      const ok = await startGoogle(key);
-      resetBase(); renderMe();
-      toast(ok ? "Google の地図にしました" : "切り替えられませんでした。キーと、Map Tiles API が有効か確かめてください");
-    });
-    if (goff) goff.addEventListener("click", () => { stopGoogle(); resetBase(); renderMe(); toast("国土地理院の地図に戻しました"); });
     $$("[data-writer]", el).forEach((b) => b.addEventListener("click", () => openWriter(b.dataset.writer)));
   }
 
@@ -1628,6 +1577,7 @@
     const sheet = $("#mm-sheet", p), head = $("#mm-head", p), body = $("#mm-body", p), seg = $("#mm-seg", p), top = $(".mm-top", p);
     const snaps = () => { const h = p.clientHeight; return { peek: 132, half: h * 0.52, full: h - 100 }; };
     const sheetH = () => snaps()[state.myMapSheet];
+    const sheetOverMm = (h) => Math.max(0, h - MAP_B); // シートが地図に重なる高さ（地図は下を MAP_B だけあけてある）
     const topH = () => top.offsetHeight;
     let m = null, lyr = null, blyr = null, infos = [];
 
@@ -1641,25 +1591,15 @@
     const shown = (t) => state.myMapFilter === "all" || (state.myMapFilter === "rec") === (t.kind === "mine");
     const photosOf = (t) => (t.kind === "mine" ? t.s.photos || (t.s.photos = []) : t.x.photos || (t.x.photos = []));
 
-    /* 地図 */
-    if (typeof L !== "undefined") {
-      m = L.map("mm-mine", { zoomControl: false, attributionControl: false }).setView(OMIYA, 12); // 位置はあとで合わせる
-      tileLayer().addTo(m);
-      lyr = L.layerGroup().addTo(m);
-      blyr = L.layerGroup().addTo(m); // 吹き出し（どの拡大でも、重ならないものを出す）
-      panelMaps.push(m);
-      m.on("zoomstart", () => blyr.clearLayers());
-      m.on("moveend", () => { state.myMapView = { c: m.getCenter(), z: m.getZoom() }; bubbles(); });
-      m.on("click", () => { if (state.myMapSel) select(null); }); // 何もないところを押すと一覧に戻る
-    }
+    /* 地図（Google から読み込んでから作る。オフラインのときは、地図の所にだけお知らせが出て、下のシートはそのまま使える） */
     function bubbles() {
       if (!m) return;
-      blyr.clearLayers();
-      placeBubbles(m, blyr, infos, topH() + 4, m.getSize().y - sheetH() - 4, 0);
+      blyr.clear();
+      placeBubbles(m, blyr, infos, topH() + 4, m.getSize().y - sheetOverMm(sheetH()) - 4, 0);
     }
     function pins() {
       if (!m) return [];
-      lyr.clearLayers(); infos = [];
+      lyr.clear(); infos = [];
       const pts = myPins(lyr, state.myMapFilter, select, infos, state.myMapSel);
       bubbles();
       return pts;
@@ -1667,15 +1607,14 @@
     // 全部の点が、上の帯と下のシートのあいだに入るように合わせる
     function fitAll(pts) {
       if (!pts.length) { m.setView(OMIYA, 12); return; }
-      m.fitBounds(L.latLngBounds(pts), { paddingTopLeft: [30, topH() + 70], paddingBottomRight: [30, sheetH() + 20], maxZoom: 15 });
+      m.fit(pts, { top: topH() + 70, left: 30, right: 30, bottom: sheetOverMm(sheetH()) + 20, maxZoom: 15 });
     }
     // 選んだ場所を、シートを半分開いたときに見えるところのまん中へ（遠くから見ているときは、まわりがわかるくらいまで寄る）
     function reveal(t, animate = true) {
       if (!m || !t) return;
       const ll = t.kind === "mine" ? [t.s.lat, t.s.lng] : [t.sp.lat, t.sp.lng];
-      const z = Math.max(m.getZoom(), 13), size = m.getSize(), y0 = topH(), y1 = size.y - snaps().half;
-      const off = L.point(0, (y0 + y1) / 2 - size.y / 2); // 見せたいところが、地図のまん中からずれる量
-      m.setView(m.unproject(m.project(ll, z).subtract(off), z), z, animate ? { animate: true, duration: 0.35 } : { animate: false });
+      const z = Math.max(m.getZoom(), 13), size = m.getSize(), y0 = topH(), y1 = size.y - sheetOverMm(snaps().half);
+      m.centerOn(ll, z, (y0 + y1) / 2 - size.y / 2, animate); // 見せたいところを、地図のまん中からこれだけ下に出す
     }
 
     /* シート */
@@ -1710,7 +1649,7 @@
     // 何も選んでいないとき：場所の一覧（押すと選ぶ）
     function listView() {
       const f = state.myMapFilter;
-      head.innerHTML = `<b>${f === "saved" ? "登録した場所" : f === "rec" ? "自分の記録" : "自分のマップ"}</b><small>場所を押すと、ここで直せます</small>${mapCredit()}`;
+      head.innerHTML = `<b>${f === "saved" ? "登録した場所" : f === "rec" ? "自分の記録" : "自分のマップ"}</b><small>場所を押すと、ここで直せます</small>`;
       let html = legend;
       if (f !== "saved") {
         html += `<div class="section-label">自分の記録</div>`;
@@ -1824,14 +1763,22 @@
     });
 
     drawSeg(); renderBody();
-    if (m) {
+    GM.create($("#mm-mine", p), { center: OMIYA, zoom: 12 }).then((gm) => { // 位置はあとで合わせる
+      if (!gm) return;
+      m = gm;
+      lyr = m.group();
+      blyr = m.group(); // 吹き出し（どの拡大でも、重ならないものを出す）
+      panelMaps.push(m);
+      m.on("zoomstart", () => blyr.clear());
+      m.on("moveend", () => { state.myMapView = { c: m.getCenter(), z: m.getZoom() }; bubbles(); });
+      m.on("click", () => { if (state.myMapSel) select(null); }); // 何もないところを押すと一覧に戻る
       const pts = pins(), v = state.myMapView;
       const t = target(state.myMapSel);
-      if (v) m.setView(v.c, v.z, { animate: false });
-      else if (t) { m.setView(t.kind === "mine" ? [t.s.lat, t.s.lng] : [t.sp.lat, t.sp.lng], 15, { animate: false }); reveal(t, false); } // マイページの記録から開いたとき（15まで寄る）
+      if (v) m.setView(v.c, v.z);
+      else if (t) { m.setView(t.kind === "mine" ? [t.s.lat, t.s.lng] : [t.sp.lat, t.sp.lng], 15); reveal(t, false); } // マイページの記録から開いたとき（15まで寄る）
       else fitAll(pts);
-      setTimeout(() => { m.invalidateSize(); bubbles(); }, 280);
-    }
+      setTimeout(bubbles, 280); // 重なる画面が出てくる動きが終わってから
+    });
   }
 
   /* ---------- 画面の切り替え ---------- */
@@ -1849,18 +1796,17 @@
   }
   // 探す／つくる／たどる に入る。地図はそのままにして、上と下の中身を入れ替える
   function enterStage() {
-    // 地図は最初に開いたときに作る（隠れたまま作ると大きさがずれるため）
-    if (!map) initMap();
     renderTop();
     setSheet(state.sheetBy[stage()], false);
     renderSheet();
     const fit = state.fitNext; state.fitNext = false;
-    setTimeout(() => {
-      if (!map) return;
-      map.invalidateSize();
+    const go = () => {
+      if (!map || (state.view !== "map" && state.view !== "plan")) return;
       drawMap(fit);
       if (stage() === "explore") updateArea();
-    }, 30);
+    };
+    // 地図は最初に開いたときに Google から読み込んで作る。オフラインなら地図の所にだけお知らせが出て、下のシートはそのまま使える
+    if (map) setTimeout(go, 30); else initMap().then(go);
   }
   function openPlan(mode) {
     if (mode !== "redo" && state.redo) state.redo = null; // 組み直しの途中でほかへ行ったら、組み直しはやめる
@@ -1879,7 +1825,11 @@
   /* ---------- 起動 ---------- */
   document.addEventListener("DOMContentLoaded", () => {
     renderRead(); renderChips(); renderSheet(); initSheet();
-    if (google.key) startGoogle(google.key).then((ok) => { if (ok) resetBase(); });
+    // オフラインで地図が出せなかったあと、つながったら、いま見ている地図を作り直す
+    window.addEventListener("online", () => {
+      if (!map && (state.view === "map" || state.view === "plan")) enterStage();
+      if (state.view === "me" && !stack.length) renderMe();
+    });
     const refilter = () => { renderChips(); drawMap(stage() === "explore"); if (stage() === "explore") scheduleArea(); else renderSheet(); };
     $("#chips").addEventListener("click", (e) => { const b = e.target.closest("[data-tag]"); if (!b) return; state.tag = b.dataset.tag || null; refilter(); });
     $("#modes").addEventListener("click", (e) => { const b = e.target.closest("[data-mode]"); if (!b) return; state.mode = b.dataset.mode; refilter(); });
