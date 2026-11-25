@@ -3,8 +3,9 @@
  * - 地図タイル（国土地理院）は一度表示した範囲だけ保存し、件数に上限をつける
  * ファイルを変えたら VERSION の数字を上げる（古い保存が入れ替わる）
  */
-const VERSION = "v3";
+const VERSION = "v4";
 const APP_CACHE = "tam-app-" + VERSION;
+const IMG_CACHE = "tam-img-v1"; // 記事の写真（名前を変えない限り中身は変わらないので、保存を先に使う）
 const TILE_CACHE = "tam-tiles-v1";
 const TILE_MAX = 1500; // 保存するタイルの上限（1枚 数KB〜十数KB）
 
@@ -21,9 +22,55 @@ const APP_FILES = [
   "./icons/icon-192.png",
   "./icons/icon-512.png",
 ];
+// 記事の写真の小さい版（カード・吹き出し用）は最初に保存。大きい版は一度見たものだけ保存
+const IMG_FILES = [
+  "./images/castle-1-s.jpg",
+  "./images/castle-2-s.jpg",
+  "./images/castle-3-s.jpg",
+  "./images/castle-4-s.jpg",
+  "./images/hatsushima-1-s.jpg",
+  "./images/hibiya-1-s.jpg",
+  "./images/hibiya-2-s.jpg",
+  "./images/ishikawa-1-s.jpg",
+  "./images/ishikawa-2-s.jpg",
+  "./images/ishikawa-3-s.jpg",
+  "./images/itabashi-1-s.jpg",
+  "./images/itabashi-2-s.jpg",
+  "./images/itosho-1-s.jpg",
+  "./images/itosho-2-s.jpg",
+  "./images/itsukushima-1-s.jpg",
+  "./images/kanagawa-1-s.jpg",
+  "./images/kansui-1-s.jpg",
+  "./images/kansui-2-s.jpg",
+  "./images/kansui-3-s.jpg",
+  "./images/kirari-1-s.jpg",
+  "./images/kirari-2-s.jpg",
+  "./images/kirari-3-s.jpg",
+  "./images/kure-chinraiken-1-s.jpg",
+  "./images/kure-chinraiken-2-s.jpg",
+  "./images/kure-kujira-1-s.jpg",
+  "./images/kure-yamato-1-s.jpg",
+  "./images/musashino-1-s.jpg",
+  "./images/musashino-2-s.jpg",
+  "./images/sentpure-1-s.jpg",
+  "./images/sentpure-2-s.jpg",
+  "./images/toyama-st-1-s.jpg",
+  "./images/toyama-st-2-s.jpg",
+  "./images/umimirai-1-s.jpg",
+  "./images/umimirai-2-s.jpg",
+  "./images/yonekyu-1-s.jpg",
+  "./images/yonekyu-2-s.jpg",
+  "./images/yonekyu-3-s.jpg",
+];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(APP_CACHE).then((c) => c.addAll(APP_FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    Promise.all([
+      caches.open(APP_CACHE).then((c) => c.addAll(APP_FILES)),
+      // 写真は1枚失敗しても入れられるように1枚ずつ
+      caches.open(IMG_CACHE).then((c) => Promise.all(IMG_FILES.map((f) => c.match(f).then((hit) => hit || c.add(f).catch(() => {}))))),
+    ]).then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (e) => {
@@ -54,6 +101,24 @@ self.addEventListener("fetch", (e) => {
         try {
           const res = await fetch(req);
           if (res.ok || res.type === "opaque") { c.put(req, res.clone()); trimTiles(); }
+          return res;
+        } catch (err) {
+          return new Response("", { status: 504 });
+        }
+      })
+    );
+    return;
+  }
+
+  // 記事の写真：保存があればそれを使い、なければ取りに行って保存
+  if (url.origin === self.location.origin && url.pathname.includes("/images/")) {
+    e.respondWith(
+      caches.open(IMG_CACHE).then(async (c) => {
+        const hit = await c.match(req, { ignoreSearch: true });
+        if (hit) return hit;
+        try {
+          const res = await fetch(req);
+          if (res.ok) c.put(req, res.clone());
           return res;
         } catch (err) {
           return new Response("", { status: 504 });

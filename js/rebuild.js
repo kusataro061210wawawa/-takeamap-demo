@@ -14,10 +14,24 @@
     return 2 * R * Math.asin(Math.sqrt(s));
   }
   const walkMin = (a, b) => Math.max(1, Math.ceil((distM(a, b) * DETOUR) / WALK_SPEED));
+  // 移動：歩いて2kmまで（約33分）は歩き。それより遠いときは電車・バスなど（待ち15分＋時速30km）
+  const WALK_MAX_M = 2000, RIDE_SPEED = 500, RIDE_WAIT = 15;
+  function moveMin(a, b) {
+    const m = distM(a, b) * DETOUR;
+    if (m <= WALK_MAX_M) return { min: Math.max(1, Math.ceil(m / WALK_SPEED)), mode: "walk" };
+    return { min: Math.ceil((RIDE_WAIT + m / RIDE_SPEED) / 5) * 5, mode: "ride" };
+  }
 
   function openWindow(spot) {
     if (!spot.hours) return [0, 24 * 60];
     return [toMin(spot.hours.open), toMin(spot.hours.close)];
+  }
+  // 中休み（rest）にかかるか。かかるなら中休みが明ける時刻を返す
+  function restEnd(spot, start, stay) {
+    const r = spot.hours && spot.hours.rest;
+    if (!r) return null;
+    const a = toMin(r[0]), b = toMin(r[1]);
+    return start < b && start + Math.min(stay, MIN_STAY) > a ? b : null;
   }
 
   // お気に入りの書き手（タグだけのお気に入りも含む）が付けた評価を、場所ごとにまとめる
@@ -41,10 +55,10 @@
     let t = toMin(record.start || "10:00"), prev = null;
     return record.spots.map((rs) => {
       const spot = byId[rs.spot];
-      const walk = prev ? walkMin(prev, spot) : 0;
-      const arrive = t + walk, depart = arrive + rs.stay;
+      const mv = prev ? moveMin(prev, spot) : { min: 0, mode: "walk" };
+      const walk = mv.min, arrive = t + walk, depart = arrive + rs.stay;
       prev = spot; t = depart;
-      return { spot: rs.spot, stay: rs.stay, walk, arrive, depart, status: "planned" };
+      return { spot: rs.spot, stay: rs.stay, walk, mode: mv.mode, arrive, depart, status: "planned" };
     });
   }
 
@@ -64,13 +78,16 @@
     const fits = (spot, arrive, stay) => {
       const [o, c] = openWindow(spot);
       if (closed.has(spot.id)) return false;
-      const start = Math.max(arrive, o);
+      let start = Math.max(arrive, o);
+      const re = restEnd(spot, start, stay);
+      if (re != null) start = re;
       return start + Math.min(stay, MIN_STAY) <= c;
     };
 
     for (let i = opts.fromIndex; i < schedule.length; i++) {
       const orig = schedule[i], spot = byId[orig.spot];
-      let walk = walkMin(pos, spot), arrive = t + walk;
+      const mv = moveMin(pos, spot);
+      let walk = mv.min, mode = mv.mode, arrive = t + walk;
       let reason = null;
       if (closed.has(spot.id)) reason = "臨時休業";
       else if (opts.rain && !spot.indoor) reason = "雨のため屋外を避ける";
@@ -109,12 +126,14 @@
         const pref = opts.prefer && opts.prefer[orig.spot];
         if (pref) { const p = cands.find((x) => x.id === pref); if (p) pick = p; }
         chosen = byId[pick.id];
-        walk = pick.walk; arrive = pick.arrive;
+        walk = pick.walk; mode = "walk"; arrive = pick.arrive;
         used.add(chosen.id);
       }
 
       const [o, c] = openWindow(chosen);
-      const start = Math.max(arrive, o);
+      let start = Math.max(arrive, o);
+      const re = restEnd(chosen, start, orig.stay);
+      if (re != null) start = re;
       let stay = orig.stay, status = reason ? "replaced" : "kept";
       if (start + stay > c) {
         stay = c - start;
@@ -123,7 +142,7 @@
       }
       const shifted = !reason && Math.abs(start - orig.arrive) >= 5;
       out.push({
-        spot: chosen.id, stay, walk, arrive: start, depart: start + stay,
+        spot: chosen.id, stay, walk, mode, arrive: start, depart: start + stay,
         status: status === "kept" && shifted ? "shifted" : status,
         reason, replacedFrom: reason ? orig.spot : null, alternatives,
         before: { arrive: orig.arrive, stay: orig.stay },
@@ -135,7 +154,7 @@
 
   function writerName(data, id) { const w = data.writers.find((x) => x.id === id); return w ? w.name : id; }
 
-  const api = { toMin, fmt, distM, walkMin, favoriteRatings, buildSchedule, rebuild };
+  const api = { toMin, fmt, distM, walkMin, moveMin, restEnd, favoriteRatings, buildSchedule, rebuild };
   if (typeof module !== "undefined") module.exports = api;
   if (typeof window !== "undefined") window.TAM_REBUILD = api;
 })();
