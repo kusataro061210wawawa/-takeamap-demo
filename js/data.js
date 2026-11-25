@@ -127,7 +127,7 @@
   const records = [
     /* ===== くさたろ：記録フォームから ===== */
     {
-      id: "k13", writer: "kusataro", type: "route", title: "コンパクトシティの成功例、富山。その中心部を1日歩く", tags: ["旅行", "図書館建築", "グルメ", "歴史"], date: "2026-05-07", start: "06:30", cover: "kansui-1",
+      id: "k13", writer: "kusataro", type: "route", title: "コンパクトシティの成功例、富山。その中心部を1日歩く", mainTag: "旅行", tags: ["旅行", "図書館建築", "グルメ", "歴史"], date: "2026-05-07", start: "06:30", cover: "kansui-1",
       lead: "富山市は、路面電車を軸に、暮らしに必要なものを街の中心に集める「コンパクトシティ」のまちづくりで知られています。その中心部は、実際に歩いてみるとどうなっているのか。朝の富山駅から、隈研吾さんが設計した図書館まで、6か所を1日かけて回りました。",
       spots: [
         {
@@ -192,7 +192,7 @@
       went: 86,
     },
     {
-      id: "k10", writer: "kusataro", type: "spot", title: "板橋区民がうらやましくなる、生まれ変わった中央図書館", tags: ["図書館建築"], date: "2025-11-16",
+      id: "k10", writer: "kusataro", type: "spot", title: "板橋区民がうらやましくなる、生まれ変わった中央図書館", mainTag: "図書館建築", tags: ["図書館建築"], date: "2025-11-16",
       spots: [{
         spot: "lib-itabashi", stay: 90, rating: 3,
         note: "3階の窓ぎわの個別席は、夜に間接照明をつけると格別。",
@@ -207,7 +207,7 @@
       went: 27,
     },
     {
-      id: "k11", writer: "kusataro", type: "spot", title: "スタイリッシュで気持ちいい図書館。勉強も仕事もはかどる", tags: ["図書館建築"], date: "2026-03-11",
+      id: "k11", writer: "kusataro", type: "spot", title: "スタイリッシュで気持ちいい図書館。勉強も仕事もはかどる", mainTag: "図書館建築", tags: ["図書館建築"], date: "2026-03-11",
       spots: [{
         spot: "lib-kanagawa", stay: 90, rating: 3,
         note: "1階はカフェと雑誌で気軽に。上の階は静かに集中できる。",
@@ -222,7 +222,7 @@
       went: 19,
     },
     {
-      id: "k12", writer: "kusataro", type: "spot", title: "駅近のおもしろ空間。かわいい見た目に、つい通いたくなる", tags: ["図書館建築"], date: "2026-03-23",
+      id: "k12", writer: "kusataro", type: "spot", title: "駅近のおもしろ空間。かわいい見た目に、つい通いたくなる", mainTag: "図書館建築", tags: ["図書館建築"], date: "2026-03-23",
       spots: [{
         spot: "lib-musashino", stay: 150, rating: 3,
         note: "窓ひとつ分の大きさが、館内を区切るユニットになっている。",
@@ -237,7 +237,7 @@
       went: 23,
     },
     {
-      id: "k7", writer: "kusataro", type: "spot", title: "チーズケーキ図書館。窓ぎわが快適で、眠ってしまいそう", tags: ["図書館建築"], date: "2026-04-06",
+      id: "k7", writer: "kusataro", type: "spot", title: "チーズケーキ図書館。窓ぎわが快適で、眠ってしまいそう", mainTag: "図書館建築", tags: ["図書館建築"], date: "2026-04-06",
       spots: [{
         spot: "lib-hibiya", stay: 90, rating: 3,
         note: "ピザをひと切れ切り出したような形。窓ぎわの席が快適。",
@@ -252,7 +252,7 @@
       went: 31,
     },
     {
-      id: "k14", writer: "kusataro", type: "spot", title: "移住先として人気の東川町。その理由がここに詰まっている", tags: ["図書館建築"], date: "2026-08-13",
+      id: "k14", writer: "kusataro", type: "spot", title: "移住先として人気の東川町。その理由がここに詰まっている", mainTag: "図書館建築", tags: ["図書館建築"], date: "2026-08-13",
       spots: [{
         spot: "lib-sentpure", stay: 90, rating: 3,
         note: "町の魅力の紹介と図書館がひとつに。東川家具の展示も多い。",
@@ -267,7 +267,7 @@
       went: 12,
     },
     {
-      id: "k2", writer: "kusataro", type: "spot", title: "図書館建築を見るならここ。金沢市民がうらやましい", tags: ["図書館建築"], date: "2026-09-13",
+      id: "k2", writer: "kusataro", type: "spot", title: "図書館建築を見るならここ。金沢市民がうらやましい", mainTag: "図書館建築", tags: ["図書館建築"], date: "2026-09-13",
       spots: [{
         spot: "lib-ishikawa", stay: 150, rating: 3,
         note: "本のページをめくる瞬間がモチーフ。円形ドームの内装は圧巻。",
@@ -282,7 +282,7 @@
       went: 61,
     },
     {
-      id: "k3", writer: "kusataro", type: "spot", title: "金沢の図書館はここも外せない。SFのような、異質な空間", tags: ["図書館建築"], date: "2026-09-13",
+      id: "k3", writer: "kusataro", type: "spot", title: "金沢の図書館はここも外せない。SFのような、異質な空間", mainTag: "図書館建築", tags: ["図書館建築"], date: "2026-09-13",
       spots: [{
         spot: "lib-umimirai", stay: 90, rating: 3,
         note: "6,000の穴から光が差し込む、白い箱の図書館。",
@@ -297,16 +297,16 @@
     },
 
     /* ===== くさたろ：ほかの記録（仮） ===== */
-    { id: "k1", writer: "kusataro", type: "spot", title: "波打つ木の天井の下で読む", tags: ["図書館建築"], date: "2026-10-12", spots: [{ spot: "lib-gifu", rating: 3, note: "大きな傘のような照明の下に、席がゆるく集まっている。一日いられる。" }], went: 48 },
-    { id: "k4", writer: "kusataro", type: "spot", title: "美術館と図書館がらせんでつながる", tags: ["図書館建築", "美術館"], date: "2026-07-14", spots: [{ spot: "lib-ota", rating: 3, note: "スロープを上がるうちに、展示と本棚が入れ替わる。" }], member: { teaser: "建物の見どころを順番に回るルート図", body: "入口→スロープ→屋上の順で。" }, went: 22 },
-    { id: "k5", writer: "kusataro", type: "spot", title: "駅前の図書館は広くて静か", tags: ["図書館建築"], date: "2026-06-01", spots: [{ spot: "lib-tsuchiura", rating: 2, note: "駅から濡れずに行ける。窓際の席が多い。" }], went: 12 },
-    { id: "k6", writer: "kusataro", type: "spot", title: "本棚の壁に囲まれる", tags: ["図書館建築"], date: "2026-05-05", spots: [{ spot: "lib-takeo", rating: 2, note: "高い本棚が壁になっていて圧倒される。休日は混む。" }], went: 30 },
-    { id: "k8", writer: "kusataro", type: "spot", title: "駅近の新しい図書館", tags: ["図書館建築"], date: "2026-11-02", spots: [{ spot: "omiya-lib", rating: 3, note: "大宮駅から歩いてすぐ。明るい閲覧席が多い。" }], went: 17 },
-    { id: "k9", writer: "kusataro", type: "spot", title: "本が読めるカフェ", tags: ["カフェ", "図書館建築"], date: "2026-10-28", spots: [{ spot: "c-hidamari", rating: 3, note: "壁一面の本棚。雨の日の避難先にいい。" }], went: 14 },
+    { id: "k1", writer: "kusataro", type: "spot", title: "波打つ木の天井の下で読む", mainTag: "図書館建築", tags: ["図書館建築"], date: "2026-10-12", spots: [{ spot: "lib-gifu", rating: 3, note: "大きな傘のような照明の下に、席がゆるく集まっている。一日いられる。" }], went: 48 },
+    { id: "k4", writer: "kusataro", type: "spot", title: "美術館と図書館がらせんでつながる", mainTag: "図書館建築", tags: ["図書館建築", "美術館"], date: "2026-07-14", spots: [{ spot: "lib-ota", rating: 3, note: "スロープを上がるうちに、展示と本棚が入れ替わる。" }], member: { teaser: "建物の見どころを順番に回るルート図", body: "入口→スロープ→屋上の順で。" }, went: 22 },
+    { id: "k5", writer: "kusataro", type: "spot", title: "駅前の図書館は広くて静か", mainTag: "図書館建築", tags: ["図書館建築"], date: "2026-06-01", spots: [{ spot: "lib-tsuchiura", rating: 2, note: "駅から濡れずに行ける。窓際の席が多い。" }], went: 12 },
+    { id: "k6", writer: "kusataro", type: "spot", title: "本棚の壁に囲まれる", mainTag: "図書館建築", tags: ["図書館建築"], date: "2026-05-05", spots: [{ spot: "lib-takeo", rating: 2, note: "高い本棚が壁になっていて圧倒される。休日は混む。" }], went: 30 },
+    { id: "k8", writer: "kusataro", type: "spot", title: "駅近の新しい図書館", mainTag: "図書館建築", tags: ["図書館建築"], date: "2026-11-02", spots: [{ spot: "omiya-lib", rating: 3, note: "大宮駅から歩いてすぐ。明るい閲覧席が多い。" }], went: 17 },
+    { id: "k9", writer: "kusataro", type: "spot", title: "本が読めるカフェ", mainTag: "カフェ", tags: ["カフェ", "図書館建築"], date: "2026-10-28", spots: [{ spot: "c-hidamari", rating: 3, note: "壁一面の本棚。雨の日の避難先にいい。" }], went: 14 },
 
     /* ===== ゆう：記録フォームから ===== */
     {
-      id: "y3", writer: "yu", type: "route", title: "広島の旅：呉で船を見て、冷麺を食べて、宮島へ", tags: ["旅行", "歴史", "グルメ"], date: "2026-09-03", start: "10:00", cover: "itsukushima-1",
+      id: "y3", writer: "yu", type: "route", title: "広島の旅：呉で船を見て、冷麺を食べて、宮島へ", mainTag: "旅行", tags: ["旅行", "歴史", "グルメ"], date: "2026-09-03", start: "10:00", cover: "itsukushima-1",
       lead: "海軍の街・呉で船の博物館を2つ回り、元祖の呉冷麺を食べてから、宮島の厳島神社へ。広島の海を1日で味わうルートです。",
       spots: [
         {
@@ -349,7 +349,7 @@
       went: 52,
     },
     {
-      id: "y4", writer: "yu", type: "route", title: "熱海旅行：海辺でのんびりしてから、船で初島へ", tags: ["旅行", "自然"], date: "2026-09-14", start: "10:00", cover: "hatsushima-1",
+      id: "y4", writer: "yu", type: "route", title: "熱海旅行：海辺でのんびりしてから、船で初島へ", mainTag: "旅行", tags: ["旅行", "自然"], date: "2026-09-14", start: "10:00", cover: "hatsushima-1",
       lead: "熱海の海辺でのんびり過ごしてから、船で初島へ渡る、海づくしの日帰りルートです。",
       spots: [
         {
@@ -374,31 +374,31 @@
     },
     // 大宮のラーメン（実在の店）
     {
-      id: "y5", writer: "yu", type: "spot", title: "大宮ラーメン：迷ったら、まず狼煙", tags: ["ラーメン", "グルメ"], date: "2026-11-24",
+      id: "y5", writer: "yu", type: "spot", title: "大宮ラーメン：迷ったら、まず狼煙", mainTag: "ラーメン", tags: ["ラーメン", "グルメ"], date: "2026-11-24",
       spots: [{ spot: "r-noroshi", stay: 45, rating: 3, note: "大宮で迷ったらまずここ。11時〜22時の通し営業。",
         text: ["大宮駅の東口から歩いて行ける、狼煙の大宮店。濃厚なつけ麺で知られる埼玉の人気店です。", "ひとことで言うなら、おいしいよ。大宮でラーメンに迷ったら、まずここをすすめます。11時から22時まで通しで開いているので、昼でも夜でも寄りやすいのもうれしいところです。"] }],
       went: 15,
     },
     {
-      id: "y6", writer: "yu", type: "spot", title: "大宮ラーメン：凪は煮干しがうまい", tags: ["ラーメン", "グルメ"], date: "2026-11-24",
+      id: "y6", writer: "yu", type: "spot", title: "大宮ラーメン：凪は煮干しがうまい", mainTag: "ラーメン", tags: ["ラーメン", "グルメ"], date: "2026-11-24",
       spots: [{ spot: "r-nagi-e", stay: 45, rating: 3, note: "煮干しがうまい。煮干し好きならここ。",
         text: ["大宮駅東口の一番街にある、ラーメン凪。", "とにかく煮干しがうまい。スープを口にした瞬間に煮干しの香りが広がる、煮干し好きにはたまらない一杯です。"] }],
       went: 11,
     },
     {
-      id: "y7", writer: "yu", type: "spot", title: "大宮ラーメン：朝10時から開いている家系、武蔵家", tags: ["ラーメン", "グルメ"], date: "2026-11-24",
+      id: "y7", writer: "yu", type: "spot", title: "大宮ラーメン：朝10時から開いている家系、武蔵家", mainTag: "ラーメン", tags: ["ラーメン", "グルメ"], date: "2026-11-24",
       spots: [{ spot: "r-musashiya", stay: 40, rating: 2, note: "朝10時から開いている家系。",
         text: ["大宮駅東口の大門町にある、家系ラーメンの武蔵家。", "朝10時から夜22時まで開いているので、早めの昼ごはんにも使えます。家系の気分の日に。"] }],
       went: 8,
     },
     {
-      id: "y8", writer: "yu", type: "spot", title: "大宮ラーメン：夜遅くまで開いているジャンクガレッジ", tags: ["ラーメン", "グルメ"], date: "2026-11-24",
+      id: "y8", writer: "yu", type: "spot", title: "大宮ラーメン：夜遅くまで開いているジャンクガレッジ", mainTag: "ラーメン", tags: ["ラーメン", "グルメ"], date: "2026-11-24",
       spots: [{ spot: "r-junk", stay: 45, rating: 2, note: "夜遅くまで開いている、がっつりまぜそば。",
         text: ["まぜそばで知られるジャンクガレッジ。武蔵家と同じ、大門町にあります。", "夜遅くまで開いていて、日曜・祝日は24時まで。遅い時間にがっつり食べたい日に。"] }],
       went: 9,
     },
     {
-      id: "y9", writer: "yu", type: "spot", title: "大宮ラーメン：葱次郎はチャーハンが美味い", tags: ["ラーメン", "グルメ"], date: "2026-11-24",
+      id: "y9", writer: "yu", type: "spot", title: "大宮ラーメン：葱次郎はチャーハンが美味い", mainTag: "ラーメン", tags: ["ラーメン", "グルメ"], date: "2026-11-24",
       spots: [{ spot: "r-negijiro", stay: 45, rating: 3, note: "ラーメンと一緒に、チャーハンを。",
         text: ["大宮駅の西口側、桜木町にある葱次郎。", "ラーメンはもちろんですが、ここで推したいのはチャーハン。ラーメンと一緒に、ぜひ頼んでほしい一品です。昼と夜で営業時間が分かれているので（15時〜17時は中休み）、時間に気をつけて。"] }],
       went: 10,
@@ -406,7 +406,7 @@
 
     /* ===== ゆう：ほかの記録（仮） ===== */
     {
-      id: "y1", writer: "yu", type: "route", title: "大宮で、建築と煮干しラーメンの1日", tags: ["旅行", "ラーメン", "図書館建築"], date: "2026-11-08", start: "10:00",
+      id: "y1", writer: "yu", type: "route", title: "大宮で、建築と煮干しラーメンの1日", mainTag: "旅行", tags: ["旅行", "ラーメン", "図書館建築"], date: "2026-11-08", start: "10:00",
       spots: [
         { spot: "omiya-lib", stay: 60, rating: 3, note: "朝いちばんに。明るい閲覧席で今日の予定を確認。" },
         { spot: "hikawa", stay: 45, rating: 3, note: "長い参道を歩くだけで気持ちが切り替わる。" },
@@ -416,23 +416,23 @@
       ],
       went: 41,
     },
-    { id: "y2", writer: "yu", type: "route", title: "金沢、図書館と海の1日", tags: ["旅行", "図書館建築"], date: "2026-09-21", start: "09:30", spots: [{ spot: "lib-umimirai", stay: 60, rating: 3, note: "朝の光がきれい。" }, { spot: "lib-ishikawa", stay: 90, rating: 3, note: "午後はここで長居。" }], went: 19 },
+    { id: "y2", writer: "yu", type: "route", title: "金沢、図書館と海の1日", mainTag: "旅行", tags: ["旅行", "図書館建築"], date: "2026-09-21", start: "09:30", spots: [{ spot: "lib-umimirai", stay: 60, rating: 3, note: "朝の光がきれい。" }, { spot: "lib-ishikawa", stay: 90, rating: 3, note: "午後はここで長居。" }], went: 19 },
 
     // みなみ：大宮のラーメン（架空の店・1か所の記録）
-    { id: "m1", writer: "minami", type: "spot", title: "凪草：やさしい煮干し", tags: ["ラーメン"], date: "2026-11-01", spots: [{ spot: "r-nagi", rating: 3, note: "煮干しが好きなら一度は。昼だけの営業なので早めに。" }], went: 33 },
-    { id: "m2", writer: "minami", type: "spot", title: "しろがね：濃い煮干し", tags: ["ラーメン"], date: "2026-10-15", spots: [{ spot: "r-shirogane", rating: 2, note: "濃いめ。駅から少し歩く。" }], went: 21 },
-    { id: "m3", writer: "minami", type: "spot", title: "一角家：王道の家系", tags: ["ラーメン"], date: "2026-09-30", spots: [{ spot: "r-ikkaku", rating: 2, note: "家系の気分のときに。" }], went: 40 },
-    { id: "m4", writer: "minami", type: "spot", title: "灯：澄んだ煮干し", tags: ["ラーメン"], date: "2026-09-02", spots: [{ spot: "r-akari", rating: 3, note: "駅からすぐ。澄んだスープ。" }], went: 52 },
-    { id: "m5", writer: "minami", type: "spot", title: "ことり：鶏白湯", tags: ["ラーメン"], date: "2026-08-20", spots: [{ spot: "r-kotori", rating: 2, note: "煮干しが苦手な友だちと行くなら。" }], went: 11 },
+    { id: "m1", writer: "minami", type: "spot", title: "凪草：やさしい煮干し", mainTag: "ラーメン", tags: ["ラーメン"], date: "2026-11-01", spots: [{ spot: "r-nagi", rating: 3, note: "煮干しが好きなら一度は。昼だけの営業なので早めに。" }], went: 33 },
+    { id: "m2", writer: "minami", type: "spot", title: "しろがね：濃い煮干し", mainTag: "ラーメン", tags: ["ラーメン"], date: "2026-10-15", spots: [{ spot: "r-shirogane", rating: 2, note: "濃いめ。駅から少し歩く。" }], went: 21 },
+    { id: "m3", writer: "minami", type: "spot", title: "一角家：王道の家系", mainTag: "ラーメン", tags: ["ラーメン"], date: "2026-09-30", spots: [{ spot: "r-ikkaku", rating: 2, note: "家系の気分のときに。" }], went: 40 },
+    { id: "m4", writer: "minami", type: "spot", title: "灯：澄んだ煮干し", mainTag: "ラーメン", tags: ["ラーメン"], date: "2026-09-02", spots: [{ spot: "r-akari", rating: 3, note: "駅からすぐ。澄んだスープ。" }], went: 52 },
+    { id: "m5", writer: "minami", type: "spot", title: "ことり：鶏白湯", mainTag: "ラーメン", tags: ["ラーメン"], date: "2026-08-20", spots: [{ spot: "r-kotori", rating: 2, note: "煮干しが苦手な友だちと行くなら。" }], went: 11 },
 
     // 公式：スタンプラリー（架空）
-    { id: "o1", writer: "official", type: "route", official: true, stamp: true, title: "大宮 歴史と鉄道のスタンプラリー（架空の企画）", tags: ["旅行", "歴史"], date: "2026-11-01", start: "10:00", spots: [{ spot: "hikawa", stay: 40, rating: 3, note: "スタンプ1：参道の入口" }, { spot: "omiya-park", stay: 30, rating: 3, note: "スタンプ2：公園の池のほとり" }, { spot: "bonsai", stay: 50, rating: 3, note: "スタンプ3：盆栽の庭" }, { spot: "railway", stay: 90, rating: 3, note: "スタンプ4：ゴール" }], went: 310 },
+    { id: "o1", writer: "official", type: "route", official: true, stamp: true, title: "大宮 歴史と鉄道のスタンプラリー（架空の企画）", mainTag: "旅行", tags: ["旅行", "歴史"], date: "2026-11-01", start: "10:00", spots: [{ spot: "hikawa", stay: 40, rating: 3, note: "スタンプ1：参道の入口" }, { spot: "omiya-park", stay: 30, rating: 3, note: "スタンプ2：公園の池のほとり" }, { spot: "bonsai", stay: 50, rating: 3, note: "スタンプ3：盆栽の庭" }, { spot: "railway", stay: 90, rating: 3, note: "スタンプ4：ゴール" }], went: 310 },
 
     // その他のタグ（AIで作った仮の記録）
-    { id: "h1", writer: "haru", type: "route", title: "下北沢、古着と喫茶のはしご", tags: ["古着", "カフェ"], date: "2026-10-05", start: "13:00", spots: [{ spot: "shimokita-1", stay: 90, rating: 3, note: "細い路地ほど掘り出し物がある。" }, { spot: "shimokita-2", stay: 45, rating: 2, note: "歩き疲れたらここ。" }], went: 18 },
-    { id: "s1", writer: "sora", type: "spot", title: "夕方の踏切", tags: ["聖地巡礼"], date: "2026-08-15", spots: [{ spot: "kamakura", rating: 3, note: "作品と同じ時間帯に。人が多いので譲り合って。" }], went: 64 },
-    { id: "a1", writer: "aoi", type: "spot", title: "朝いちばんの高尾山", tags: ["自然"], date: "2026-10-26", spots: [{ spot: "takao", rating: 3, note: "朝7時台なら静か。" }], went: 25 },
-    { id: "a2", writer: "aoi", type: "spot", title: "盆栽の小宇宙", tags: ["美術館"], date: "2026-07-07", spots: [{ spot: "bonsai", rating: 3, note: "庭の盆栽は撮影できる。" }], went: 8 },
+    { id: "h1", writer: "haru", type: "route", title: "下北沢、古着と喫茶のはしご", mainTag: "古着", tags: ["古着", "カフェ"], date: "2026-10-05", start: "13:00", spots: [{ spot: "shimokita-1", stay: 90, rating: 3, note: "細い路地ほど掘り出し物がある。" }, { spot: "shimokita-2", stay: 45, rating: 2, note: "歩き疲れたらここ。" }], went: 18 },
+    { id: "s1", writer: "sora", type: "spot", title: "夕方の踏切", mainTag: "聖地巡礼", tags: ["聖地巡礼"], date: "2026-08-15", spots: [{ spot: "kamakura", rating: 3, note: "作品と同じ時間帯に。人が多いので譲り合って。" }], went: 64 },
+    { id: "a1", writer: "aoi", type: "spot", title: "朝いちばんの高尾山", mainTag: "自然", tags: ["自然"], date: "2026-10-26", spots: [{ spot: "takao", rating: 3, note: "朝7時台なら静か。" }], went: 25 },
+    { id: "a2", writer: "aoi", type: "spot", title: "盆栽の小宇宙", mainTag: "美術館", tags: ["美術館"], date: "2026-07-07", spots: [{ spot: "bonsai", rating: 3, note: "庭の盆栽は撮影できる。" }], went: 8 },
   ];
 
   const viewer = {

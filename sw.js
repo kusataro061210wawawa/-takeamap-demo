@@ -3,7 +3,7 @@
  * - 地図タイル（国土地理院）は一度表示した範囲だけ保存し、件数に上限をつける
  * ファイルを変えたら VERSION の数字を上げる（古い保存が入れ替わる）
  */
-const VERSION = "v5";
+const VERSION = "v6";
 const APP_CACHE = "tam-app-" + VERSION;
 const IMG_CACHE = "tam-img-v1"; // 記事の写真（名前を変えない限り中身は変わらないので、保存を先に使う）
 const TILE_CACHE = "tam-tiles-v1";
