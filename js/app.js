@@ -11,11 +11,15 @@
   const RATING = { 3: "また行きたい", 2: "よかった", 1: "合わなかった" };
   const TILE = "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png";
   const ATTR = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">国土地理院</a>';
+  const CREDIT = `<small class="credit">地図：${ATTR}</small>`;
   const OMIYA = [35.9115, 139.6265];
   const KIND_BG = {
     "建築": ["#56859C", "#123D2B"], "ラーメン": ["#E86B45", "#8E3A1E"], "カフェ": ["#B08968", "#6F4E37"], "名所": ["#7F8C84", "#123D2B"],
     "公園": ["#97BC62", "#2C5F2D"], "博物館": ["#56859C", "#21295C"], "美術館": ["#A26769", "#6D2E46"], "店": ["#A7BEAE", "#626E66"], "山": ["#97BC62", "#2C5F2D"],
   };
+  // つくるで場所を押したときの滞在時間のめやす（分）
+  const STAY_BY_KIND = { "ラーメン": 40, "カフェ": 45, "博物館": 90, "美術館": 60, "公園": 40, "名所": 45, "建築": 60, "店": 60, "山": 150 };
+  const defaultStay = (sp) => STAY_BY_KIND[sp.kind] || 45;
   const ICON = {
     back: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
     lock: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>',
@@ -25,16 +29,25 @@
     spark: '<svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>',
     chev: '<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>',
     walk: '<svg viewBox="0 0 24 24"><circle cx="13" cy="4.5" r="2"/><path d="M9.5 21l2.2-6.5 3 3V21M8 12l1.5-4 3.5-1 2.5 3.5 3 1M11.7 14.5L13 7"/></svg>',
+    calplus: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M12 12.5v5M9.5 15h5"/></svg>',
   };
   const VIS = [["public", "公開"], ["member", "メンバー限定"], ["private", "非公開"]];
   const visLabel = (k) => (VIS.find((v) => v[0] === k) || VIS[0])[1];
 
+  // つくっている途中の予定。stops は { spot, stay }。start は分（600 = 10:00）
+  const newDraft = (o = {}) => ({ id: null, name: "", start: 600, stops: [], from: null, dirty: false, ...o });
+
   const state = {
     tag: null, mode: "fav", view: "read",
     readTag: null,           // 読む：選んでいるタグ（null = おすすめ）
-    planMode: "follow",      // 予定：make（つくる）/ follow（たどる）
+    planMode: "make",        // 予定：make（つくる）/ follow（たどる）
+    followList: true,        // たどる：保存した予定の一覧を出しているか
+    sheetBy: { explore: "peek", make: "peek", follow: "half" }, // 下のシートの高さ（画面ごとに覚える）
+    fitNext: false,          // 次に地図を出すとき、予定の場所に合わせて動かすか
     myMapFilter: "all",      // 自分のマップ：all / rec / saved
-    plan: null,              // { recordId, title, stops, cur }
+    draft: newDraft(),       // つくる
+    plans: [],               // 保存した予定 { id, name, start, stops, from }
+    plan: null,              // たどっている予定 { planId, title, stops（時刻つき）, cur }
     rain: false, delay: 0, closed: [],
     pending: null,           // 組み直しの結果（まだ決めていない）
     myRecords: [
@@ -71,37 +84,58 @@
     return `background:linear-gradient(135deg, ${a}, ${b})`;
   }
   function tileLayer() { return L.tileLayer(TILE, { attribution: ATTR, maxZoom: 18, minZoom: 5 }); }
-  const PIN_SIZE = { fav: 26, official: 26, mine: 22, saved: 20, other: 16 };
+  const PIN_SIZE = { fav: 26, official: 26, mine: 22, saved: 20, other: 16, num: 28 };
   function divPin(cls, inner, extra = "") {
-    const n = PIN_SIZE[cls] || 22;
+    const n = PIN_SIZE[cls.split(" ")[0]] || 22;
     return L.divIcon({ className: "", html: `<div class="pin ${cls}" style="${extra}">${inner || ""}</div>`, iconSize: [n, n], iconAnchor: [n / 2, n / 2], tooltipAnchor: [0, -n / 2] });
   }
+  // その場所について、いちばん読んでほしい記事（お気に入りの書き手 → 公式 → ほか、評価が高い順）
+  function bestRecordFor(spotId) {
+    let best = null;
+    D.records.forEach((r) => r.spots.forEach((s) => {
+      if (s.spot !== spotId) return;
+      const fk = favKind(r.writer, r);
+      const score = (fk === "fav" ? 30 : fk ? 20 : r.official ? 10 : 0) + s.rating;
+      if (!best || score > best.score) best = { r, s, score };
+    }));
+    return best;
+  }
+  const schedule = (start, stops) => (stops.length ? R.buildSchedule(D, { start: R.fmt(start), spots: stops }) : []);
 
-  /* ---------- 地図（ホーム） ---------- */
-  let map, layer;
+  /* ---------- 地図（探す・つくる・たどる で同じ地図を使う） ---------- */
+  let map, layer, bubbleLayer, pinInfo = [];
+  const stage = () => (state.view === "plan" ? state.planMode : "explore");
   function initMap() {
     if (typeof L === "undefined") { $("#map").innerHTML = '<div class="empty">地図を読み込めませんでした。インターネットにつながっているか確認してください。</div>'; return; }
     // 出典は下のシートに表示する（シートで隠れないように）
     map = L.map("map", { zoomControl: false, attributionControl: false }).setView(OMIYA, 14);
     tileLayer().addTo(map);
     layer = L.layerGroup().addTo(map);
-    // 動かしている間は一覧を薄くし、止まって少したってから、映っている範囲の記事に入れ替える
-    map.on("movestart", () => { clearTimeout(areaTimer); $("#sheet-body").classList.add("waiting"); });
-    map.on("moveend", () => scheduleArea());
+    bubbleLayer = L.layerGroup().addTo(map);
+    map.on("zoomstart", () => bubbleLayer.clearLayers());
+    // 探す：動かしている間は一覧を薄くし、止まって少したってから、映っている範囲の記事に入れ替える
+    map.on("movestart", () => { if (stage() === "explore") { clearTimeout(areaTimer); $("#sheet-body").classList.add("waiting"); } });
+    map.on("moveend", () => { refreshBubbles(); if (stage() === "explore") scheduleArea(); });
+  }
+  const topInset = () => $(".map-top").offsetHeight;
+  function sheetPx() {
+    const el = $("#sheet"), h = $("#view-map").clientHeight;
+    return el.classList.contains("peek") ? 132 : el.classList.contains("half") ? h * 0.52 : h - 100;
   }
 
-  /* 地図に映っている範囲（上の検索・タグと、下のシートに隠れていない所） */
+  /* 探す：地図に映っている範囲（上の検索・タグと、下のシートに隠れていない所） */
   let areaTimer = null, areaBounds = null;
   function computeArea() {
     if (!map) return null;
     const size = map.getSize();
     if (!size.x || !size.y) return null;
-    const top = Math.min($(".map-top").offsetHeight, size.y * 0.4);
+    const top = Math.min(topInset(), size.y * 0.4);
     const sheetH = $("#sheet").classList.contains("peek") ? 132 : size.y * 0.52;
     const bottom = Math.max(top + 40, size.y - sheetH);
     return L.latLngBounds(map.containerPointToLatLng([0, top]), map.containerPointToLatLng([size.x, bottom]));
   }
   function updateArea() {
+    if (stage() !== "explore") return;
     areaBounds = computeArea();
     renderSheet();
     const body = $("#sheet-body");
@@ -127,53 +161,176 @@
     });
   }
 
+  // ピンを置き、吹き出しに使う情報を覚えておく
+  function addPin(ll, icon, info, onClick, z = 0) {
+    const m = L.marker(ll, { icon, zIndexOffset: z }).addTo(layer);
+    if (onClick) m.on("click", onClick);
+    if (info) pinInfo.push({ ll, ...info });
+    return m;
+  }
   function drawMap(fit) {
     if (!map) return;
-    layer.clearLayers();
+    layer.clearLayers(); pinInfo = [];
+    const st = stage();
+    let pts = [];
+    if (st === "explore") pts = drawRecords(false);
+    if (st === "make") { const rp = drawRecords(true), dp = drawDraft(); pts = dp.length ? dp : rp; }
+    if (st === "follow") pts = drawFollow();
+    if (fit && pts.length) fitTo(pts);
+    refreshBubbles();
+  }
+  function fitTo(pts) {
+    map.fitBounds(L.latLngBounds(pts).pad(pts.length > 1 ? 0.12 : 0), { maxZoom: 16, paddingTopLeft: [24, topInset() + 16], paddingBottomRight: [24, sheetPx() + 16] });
+  }
+
+  // 記事のピンとルート（探す・つくる）
+  function drawRecords(make) {
     const recs = visibleRecords();
     const seen = {}, pts = [];
+    const inDraft = new Set(make ? state.draft.stops.map((s) => s.spot) : []);
     recs.forEach((r) => {
       const w = writerById[r.writer], fk = favKind(r.writer, r);
       const color = r.official ? "#E86B45" : fk ? w.color : "#A9B2AC";
       if (r.type === "route") {
-        L.polyline(r.spots.map((s) => [spotById[s.spot].lat, spotById[s.spot].lng]), { color, weight: fk || r.official ? 4 : 2.5, opacity: fk || r.official ? 0.85 : 0.6, dashArray: r.official ? "6 6" : null }).addTo(layer).on("click", () => openArticle(r.id));
+        const strong = fk || r.official;
+        const line = L.polyline(r.spots.map((s) => [spotById[s.spot].lat, spotById[s.spot].lng]), {
+          color, weight: make ? 2.5 : strong ? 4 : 2.5, opacity: make ? 0.28 : strong ? 0.85 : 0.6, dashArray: r.official ? "6 6" : null, interactive: !make,
+        }).addTo(layer);
+        if (!make) line.on("click", () => openArticle(r.id));
       }
       r.spots.forEach((s) => {
         const sp = spotById[s.spot];
         pts.push([sp.lat, sp.lng]);
         const rank = r.official ? 2 : fk ? 3 : 1;
         if (seen[sp.id] && seen[sp.id].rank >= rank) return;
-        seen[sp.id] = { rank, r, sp, color, fk };
+        seen[sp.id] = { rank, r, s, sp, color, fk };
       });
     });
-    Object.values(seen).forEach(({ r, sp, color, fk }) => {
-      let icon;
-      if (r.official) icon = divPin("official", "公式");
-      else if (fk) icon = divPin("fav", esc(writerById[r.writer].name[0]), `background:${color}`);
-      else icon = divPin("other", "");
-      const m = L.marker([sp.lat, sp.lng], { icon }).addTo(layer).on("click", () => openArticle(r.id));
-      if (state.mode === "group") {
+    // つくる：登録した場所も予定に入れられるように出す
+    if (make) V.saved.forEach((x) => {
+      if (seen[x.spot]) return;
+      const b = bestRecordFor(x.spot);
+      seen[x.spot] = { rank: 0, r: b && b.r, s: b && b.s, sp: spotById[x.spot], saved: true };
+    });
+    Object.values(seen).forEach(({ rank, r, s, sp, color, fk, saved }) => {
+      if (inDraft.has(sp.id)) return; // 予定に入れた場所は番号のピンで出す
+      const kind = saved ? "saved" : r.official ? "official" : fk ? "fav" : "other";
+      const icon = kind === "saved" ? divPin("saved", "") : kind === "official" ? divPin("official", "公式") : kind === "fav" ? divPin("fav", esc(writerById[r.writer].name[0]), `background:${color}`) : divPin("other", "");
+      const m = addPin([sp.lat, sp.lng], icon, { half: PIN_SIZE[kind] / 2, prio: rank, sp, r, s }, () => (make ? toggleDraftSpot(sp.id) : openArticle(r.id)));
+      if (!make) m.bindTooltip(esc(sp.name), { direction: "top" });
+      if (!make && state.mode === "group") {
         const t = state.tag || Object.keys(sp.groupLikes || {})[0];
         const n = sp.groupLikes && sp.groupLikes[t];
         if (n) L.marker([sp.lat, sp.lng], { icon: L.divIcon({ className: "", html: `<div class="pin-count">また行きたい ${n}人</div>`, iconSize: [0, 0], iconAnchor: [0, 0] }), interactive: false }).addTo(layer);
       }
-      m.bindTooltip(esc(sp.name), { direction: "top" });
     });
-    // 予定のルート
-    if (state.plan) {
-      const live = state.plan.stops.filter((s) => s.status !== "dropped");
-      L.polyline(live.map((s) => [spotById[s.spot].lat, spotById[s.spot].lng]), { color: "#2B7DE9", weight: 3, dashArray: "2 7", opacity: 0.9 }).addTo(layer);
-      const cur = state.plan.stops[state.plan.cur];
-      if (cur) { const sp = spotById[cur.spot]; L.marker([sp.lat, sp.lng], { icon: L.divIcon({ className: "", html: '<div class="now-dot"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }), interactive: false }).addTo(layer); }
-    }
-    if (fit && pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.25), { maxZoom: 15, paddingTopLeft: [0, 150], paddingBottomRight: [0, 140] });
+    return pts;
   }
 
+  // つくる：選んだ順に 1, 2, 3… と番号をつけ、線でつなぐ
+  function drawDraft() {
+    const stops = state.draft.stops;
+    const ll = stops.map((x) => [spotById[x.spot].lat, spotById[x.spot].lng]);
+    if (ll.length > 1) L.polyline(ll, { color: "#E86B45", weight: 4.5, opacity: 0.9, interactive: false }).addTo(layer);
+    stops.forEach((x, i) => {
+      const b = bestRecordFor(x.spot);
+      addPin(ll[i], divPin("num", String(i + 1)), { half: 14, prio: 10, sp: spotById[x.spot], r: b && b.r, s: b && b.s, num: i + 1 }, () => toggleDraftSpot(x.spot), 1000);
+    });
+    return ll;
+  }
+
+  // たどる：選んだ予定のルート。一覧を出しているときは、保存した予定を薄く出す
+  function drawFollow() {
+    const ll = (stops) => stops.map((s) => [spotById[s.spot].lat, spotById[s.spot].lng]);
+    if (state.followList || !state.plan) {
+      const pts = [];
+      state.plans.forEach((p) => {
+        const l = ll(p.stops); pts.push(...l);
+        if (l.length > 1) L.polyline(l, { color: "#123D2B", weight: 3, opacity: 0.4, dashArray: "4 6", interactive: false }).addTo(layer);
+        l.forEach((x) => L.circleMarker(x, { radius: 4, color: "#123D2B", weight: 2, fillColor: "#fff", fillOpacity: 1, interactive: false }).addTo(layer));
+      });
+      return pts;
+    }
+    const pl = state.plan;
+    const live = pl.stops.filter((s) => s.status !== "dropped");
+    if (live.length > 1) L.polyline(ll(live), { color: "#2B7DE9", weight: 4, dashArray: "2 8", opacity: 0.9, interactive: false }).addTo(layer);
+    return pl.stops.map((s, i) => {
+      const sp = spotById[s.spot], b = bestRecordFor(s.spot);
+      const cls = s.status === "dropped" ? "num fl dropped" : i < pl.cur ? "num fl done" : i === pl.cur ? "num fl now" : "num fl";
+      addPin([sp.lat, sp.lng], divPin(cls, String(i + 1)), { half: 14, prio: i === pl.cur ? 10 : 5, sp, r: b && b.r, s: b && b.s, num: i + 1, fl: true }, () => b && openArticle(b.r.id), i === pl.cur ? 900 : 500);
+      return [sp.lat, sp.lng];
+    });
+  }
+
+  /* 吹き出し：ある程度拡大して、まわりに余白があるピンだけに、場所名・記事名・評価を出す。押すと記事へ */
+  const BW = 176, BH = 62, BGAP = 9, BUBBLE_ZOOM = 15;
+  function refreshBubbles() {
+    if (!map || !bubbleLayer) return;
+    bubbleLayer.clearLayers();
+    if (map.getZoom() < BUBBLE_ZOOM || !$("#view-map").classList.contains("active")) return;
+    const size = map.getSize(), top = topInset() + 4, bottom = size.y - sheetPx() - 4;
+    const hit = (a, b, m = 0) => a.x < b.x + b.w + m && b.x < a.x + a.w + m && a.y < b.y + b.h + m && b.y < a.y + a.h + m;
+    const pins = pinInfo.map((p) => {
+      const pt = map.latLngToContainerPoint(p.ll), h = p.half + 2;
+      return { ...p, pt, box: { x: pt.x - h, y: pt.y - h, w: h * 2, h: h * 2 } };
+    }).filter((p) => p.pt.x > -40 && p.pt.x < size.x + 40 && p.pt.y > top - 40 && p.pt.y < bottom + 40);
+    const placed = [];
+    pins.filter((p) => p.pt.x >= 0 && p.pt.x <= size.x && p.pt.y >= top && p.pt.y <= bottom)
+      .sort((a, b) => b.prio - a.prio)
+      .forEach((p) => {
+        const o = p.half + BGAP;
+        const cand = {
+          top: { x: p.pt.x - BW / 2, y: p.pt.y - o - BH }, bottom: { x: p.pt.x - BW / 2, y: p.pt.y + o },
+          right: { x: p.pt.x + o, y: p.pt.y - BH / 2 }, left: { x: p.pt.x - o - BW, y: p.pt.y - BH / 2 },
+        };
+        for (const pos of ["top", "bottom", "right", "left"]) {
+          const r = { ...cand[pos], w: BW, h: BH };
+          if (r.x < 6 || r.x + BW > size.x - 6 || r.y < top || r.y + BH > bottom) continue;
+          if (placed.some((q) => hit(q, r, 6))) continue;
+          if (pins.some((q) => q !== p && hit(q.box, r))) continue;
+          placed.push(r); addBubble(p, pos, o); break;
+        }
+      });
+  }
+  function addBubble(p, pos, o) {
+    const anchor = { top: [BW / 2, o + BH], bottom: [BW / 2, -o], right: [-o, BH / 2], left: [BW + o, BH / 2] }[pos];
+    const w = p.r && writerById[p.r.writer];
+    const html = `<div class="bubble b-${pos} ${p.num ? (p.fl ? "is-fl" : "is-num") : ""} ${p.r ? "" : "no-rec"}">
+      <span class="bn">${p.num ? `<i>${p.num}</i>` : ""}${esc(p.sp.name)}</span>
+      <span class="bt">${p.r ? "「" + esc(p.r.title) + "」" : esc(p.sp.kind) + "（記事はまだありません）"}</span>
+      ${p.r ? `<span class="bm">${ratingTag(p.s.rating)}<span class="bw">${esc(w.name)}</span><span class="bgo">記事 ›</span></span>` : ""}
+    </div>`;
+    const m = L.marker(p.ll, { icon: L.divIcon({ className: "bubble-icon", html, iconSize: [BW, BH], iconAnchor: anchor }), zIndexOffset: 3000, keyboard: false }).addTo(bubbleLayer);
+    if (p.r) m.on("click", () => openArticle(p.r.id));
+  }
+
+  /* 地図の上：探すは検索、つくる・たどるは切り替え */
+  function renderTop() {
+    const st = stage();
+    $("#top-search").hidden = st !== "explore";
+    $("#stage-bar").hidden = st === "explore";
+    $("#chips").hidden = st === "follow";
+    $("#modes").hidden = st === "follow";
+    if (st !== "explore") {
+      $("#stage-bar").innerHTML = `<div class="seg stage-seg">${[["make", "つくる"], ["follow", "たどる"]].map(([k, l]) => `<button data-stage="${k}" class="${st === k ? "on" : ""}">${l}</button>`).join("")}</div><span class="demo-badge">試作・データは仮</span>`;
+    }
+  }
   function renderChips() {
     const tags = [null, ...D.TAGS];
     $("#chips").innerHTML = tags.map((t) => `<button class="chip ${state.tag === t ? "on" : ""}" data-tag="${t || ""}">${t || "すべて"}</button>`).join("");
     const modes = [["fav", "お気に入り"], ["group", "同じ趣味の人たち"], ["all", "すべての人"]];
     $("#modes").innerHTML = modes.map(([k, l]) => `<button class="${state.mode === k ? "on" : ""}" data-mode="${k}">${l}</button>`).join("");
+  }
+
+  /* ---------- 下のシート（探す：記事／つくる：予定表／たどる：予定） ---------- */
+  function renderSheet() {
+    const st = stage(), body = $("#sheet-body");
+    const keep = body.dataset.stage === st ? body.scrollTop : 0;
+    if (st !== "explore") body.classList.remove("waiting", "fresh");
+    if (st === "explore") renderExploreSheet();
+    else if (st === "make") renderMakeSheet();
+    else renderFollowSheet();
+    body.dataset.stage = st; body.scrollTop = keep;
   }
 
   function recordCard(r) {
@@ -189,25 +346,135 @@
     </button>`;
   }
 
-  function renderSheet() {
+  function renderExploreSheet() {
     const all = visibleRecords();
     const recs = all.filter(inArea);
     const off = recs.filter((r) => r.official);
     const favs = recs.filter((r) => !r.official && favKind(r.writer, r));
     const others = recs.filter((r) => !r.official && !favKind(r.writer, r));
     const label = state.mode === "fav" ? "お気に入り" : state.mode === "group" ? "同じ趣味の人たち" : "すべての人";
-    $("#sheet-head").innerHTML = `<b>${esc(state.tag || "すべて")}の記事</b><small>${areaBounds ? "この範囲 " : ""}${recs.length}件・${label}</small><small class="credit">地図：${ATTR}</small>`;
+    $("#sheet-head").innerHTML = `<b>${esc(state.tag || "すべて")}の記事</b><small>${areaBounds ? "この範囲 " : ""}${recs.length}件・${label}</small>${CREDIT}`;
     let html = "";
     if (favs.length) html += `<div class="section-label">お気に入りの書き手</div>` + favs.map(recordCard).join("");
     if (others.length) html += `<div class="section-label">${state.mode === "group" ? "同じ趣味の記録が多い人たち" : "ほかの書き手"}</div>` + others.map(recordCard).join("");
     if (off.length) html += `<div class="section-label">公式（自治体・企業）</div>` + off.map(recordCard).join("");
     if (!all.length) html = `<div class="empty">この条件の記事はまだありません。<br>「同じ趣味の人たち」に切り替えてみてください。</div>`;
-    else if (!recs.length) html = `<div class="empty">地図に映っている範囲には、記事がありません。<br>地図を縮小するか、動かしてみてください。<br><br><button class="btn ghost small" id="fit-all">記事のある場所を表示する（${all.length}件）</button></div>`;
+    else if (!recs.length) html = `<div class="empty">地図に映っている範囲には、記事がありません。<br>地図を縮小するか、動かしてみてください。<br><br><button class="btn ghost small" data-act="fit-all">記事のある場所を表示する（${all.length}件）</button></div>`;
     $("#sheet-body").innerHTML = html;
-    const fa = $("#fit-all"); if (fa) fa.addEventListener("click", () => drawMap(true));
   }
 
-  function setSheet(s) { const el = $("#sheet"); el.classList.remove("peek", "half", "full"); el.classList.add(s); }
+  /* つくる：予定表。縮めているときは順番だけ、引き上げると時間の調整と保存 */
+  function hoursWarn(sp, a, d) {
+    if (!sp.hours) return "";
+    const o = R.toMin(sp.hours.open), c = R.toMin(sp.hours.close);
+    if (a >= c) return `着く時間（${R.fmt(a)}）には閉まっています`;
+    if (a < o) return `着く時間（${R.fmt(a)}）はまだ開いていません（${sp.hours.open}から）`;
+    if (d > c) return `${sp.hours.close}に閉まります。滞在を短くするか、順番を変えてください`;
+    return "";
+  }
+  function renderMakeSheet() {
+    const d = state.draft, sch = schedule(d.start, d.stops), n = sch.length;
+    const span = n ? `${R.fmt(sch[0].arrive)}〜${R.fmt(sch[n - 1].depart)}` : "";
+    $("#sheet-head").innerHTML = `<b>予定をつくる</b><small>${n ? `${n}か所・${span}` : "場所を押して始める"}</small>${CREDIT}`;
+    if (!n) {
+      $("#sheet-body").innerHTML = `<div class="mk-hint"><b>地図の場所を押すと、1、2、3…の順に予定に入ります</b>もう一度押すと外れます。地図を拡大すると吹き出しが出て、記事を読めます。「読む」の記事の「つくる」からは、書いた人のルートを先に入れられます。</div>`;
+      return;
+    }
+    const chain = sch.map((s, i) => `<span class="chain-stop"><i>${i + 1}</i>${R.fmt(s.arrive)} ${esc(spotById[s.spot].name)}</span>`).join('<span class="chain-arrow">›</span>');
+    const items = sch.map((s, i) => {
+      const sp = spotById[s.spot], warn = hoursWarn(sp, s.arrive, s.depart);
+      const move = i > 0 ? `<div class="mk-move">${ICON.walk}<span><b>${R.fmt(sch[i - 1].depart)}〜${R.fmt(s.arrive)}</b>　${esc(spotById[sch[i - 1].spot].name)} → ${esc(sp.name)}（歩いて${s.walk}分）</span></div>` : "";
+      return `${move}<div class="mk-stop">
+        <span class="mk-num">${i + 1}</span>
+        <div class="mk-main">
+          <div class="mk-time">${R.fmt(s.arrive)}〜${R.fmt(s.depart)}</div>
+          <b>${esc(sp.name)}</b>
+          <div class="small">${sp.hours ? `営業 ${sp.hours.open}〜${sp.hours.close}（仮）` : "営業時間の制約なし（仮）"}</div>
+          ${warn ? `<div class="mk-warn">${esc(warn)}</div>` : ""}
+          <div class="mk-ctrl"><span class="small">滞在</span><button data-mk="stay" data-i="${i}" data-d="-15">−15分</button><b>${s.stay}分</b><button data-mk="stay" data-i="${i}" data-d="15">＋15分</button></div>
+        </div>
+        <div class="mk-side">
+          <button data-mk="up" data-i="${i}" ${i === 0 ? "disabled" : ""} aria-label="前へ">↑</button>
+          <button data-mk="down" data-i="${i}" ${i === n - 1 ? "disabled" : ""} aria-label="後ろへ">↓</button>
+          <button data-mk="del" data-i="${i}" aria-label="外す">×</button>
+        </div>
+      </div>`;
+    }).join("");
+    $("#sheet-body").innerHTML = `<div class="chain">${chain}</div>
+      <button class="pull-hint" data-mk="expand">引き上げると、時間を調整して名前を付けて保存できます</button>
+      <div class="mk-section">
+        <div class="mk-row"><label>出発 <input type="time" class="field time-in" id="mk-start" value="${R.fmt(d.start)}" step="300"></label>${d.from ? `<span class="small">元の記事：${esc(recById[d.from].title)}</span>` : ""}</div>
+        <div class="mk-list">${items}</div>
+        <div class="mk-save"><input class="field" id="mk-name" placeholder="予定の名前（例：大宮で建築とラーメン）" value="${esc(d.name)}" aria-label="予定の名前"><button class="btn primary" data-mk="save">${d.id ? "上書き保存" : "保存"}</button></div>
+        ${d.id && !d.dirty ? `<div class="saved-note">保存しました。「たどる」から選べます<button class="link-btn" data-mk="follow">この予定をたどる${ICON.chev}</button></div>` : ""}
+        <div class="mk-foot"><button class="mini-btn" data-mk="new">新しくつくる（空にする）</button></div>
+      </div>`;
+  }
+
+  /* たどる：保存した予定の一覧 → 選ぶと、その予定の時間割・組み直し */
+  function renderFollowSheet() {
+    if (state.followList || !state.plan) {
+      $("#sheet-head").innerHTML = `<b>たどる</b><small>保存した予定 ${state.plans.length}件</small>${CREDIT}`;
+      if (!state.plans.length) {
+        $("#sheet-body").innerHTML = `<div class="empty">まだ保存した予定がありません。<br>「つくる」で場所をつなげて、名前を付けて保存すると、ここから選べます。<br><br><button class="btn primary" data-fl="make">つくるへ</button></div>`;
+        return;
+      }
+      $("#sheet-body").innerHTML = `<div class="section-label">たどる予定を選んでください</div>` + state.plans.map((p) => {
+        const sch = schedule(p.start, p.stops), on = state.plan && state.plan.planId === p.id;
+        return `<div class="plan-card ${on ? "on" : ""}" data-fl="pick" data-id="${p.id}">
+          <div class="row-between"><b class="pn">${esc(p.name)}</b>${on ? '<span class="badge fav">たどっている途中</span>' : ""}</div>
+          <div class="meta"><span>${p.stops.length}か所</span><span>${R.fmt(sch[0].arrive)}〜${R.fmt(sch[sch.length - 1].depart)}</span>${p.from ? `<span>元の記事：${esc(recById[p.from].title)}</span>` : ""}</div>
+          <div class="small chain-text">${p.stops.map((s, i) => `${i + 1} ${esc(spotById[s.spot].name)}`).join(" › ")}</div>
+          <div class="row"><button class="btn small accent" data-fl="pick" data-id="${p.id}">${on ? "続きをたどる" : "この予定をたどる"}</button><button class="mini-btn" data-fl="edit" data-id="${p.id}">つくるで直す</button><button class="mini-btn danger" data-fl="del" data-id="${p.id}">消す</button></div>
+        </div>`;
+      }).join("");
+      return;
+    }
+    const pl = state.plan, cur = pl.stops[pl.cur], curSpot = spotById[cur.spot];
+    const next = pl.stops.slice(pl.cur + 1).find((s) => s.status !== "dropped");
+    const items = pl.stops.map((s, i) => {
+      const sp = spotById[s.spot];
+      const st = i < pl.cur ? "done" : i === pl.cur ? "now" : "";
+      const ch = s.status === "replaced" ? '<span class="change replaced">組み直し</span>' : s.status === "shifted" ? '<span class="change shifted">時間がずれた</span>' : s.status === "shortened" ? '<span class="change shortened">短く</span>' : s.status === "dropped" ? '<span class="change dropped">中止</span>' : "";
+      const closedNow = state.closed.includes(s.spot) ? '<span class="change replaced">臨時休業</span>' : "";
+      const walk = s.walk && s.arrive != null ? `<div class="tl-walk">${s.walkFrom ? esc(s.walkFrom) + "から" : ""}歩いて${s.walk}分</div>` : "";
+      const from = s.replacedFrom ? `<div class="small">${esc(spotById[s.replacedFrom].name)}の代わり</div>` : "";
+      return `${i > 0 ? `<div class="tl-item"><div></div><div class="tl-line"></div><div>${walk}</div></div>` : ""}
+        <div class="tl-item"><div class="tl-time">${s.arrive != null ? R.fmt(s.arrive) : "—"}</div><div class="tl-line"><span class="tl-dot ${st}"></span></div>
+        <div class="tl-card ${st} ${s.status === "replaced" ? "replaced" : ""} ${s.status === "dropped" ? "dropped" : ""}">
+          <b>${i + 1}　${esc(sp.name)}</b>${ch}${closedNow}
+          <div class="small">${sp.indoor ? "屋内" : "屋外"}・${s.stay}分${sp.hours ? `・${sp.hours.open}〜${sp.hours.close}` : ""}</div>${from}
+        </div></div>`;
+    }).join("");
+    const alert = [];
+    if (state.closed.includes(cur.spot)) alert.push(`<b>${esc(curSpot.name)}が臨時休業でした</b>同じ系統で、歩いて行ける店を探せます。`);
+    if (state.rain && !state.rainHandled) alert.push(`<b>雨が降り出しました</b>屋外の予定を、屋内の場所に替えられます。`);
+    if (state.delay) alert.push(`<b>予定より${state.delay}分遅れています</b>閉まる時間に間に合うように並べ直せます。`);
+    const left = state.premium ? "無制限" : `今月の残り${V.rebuildsLeft}回`;
+    const canRebuild = state.premium || V.rebuildsLeft > 0;
+    $("#sheet-head").innerHTML = `<b>${esc(pl.title)}</b><small>たどっています</small>${CREDIT}`;
+    $("#sheet-body").innerHTML = `<button class="link-btn back-list" data-fl="list">‹ ほかの予定を選ぶ</button>
+      ${alert.map((a) => `<div class="alert">${a}</div>`).join("")}
+      <div class="fl-now">いま：<b>${pl.cur + 1}　${esc(curSpot.name)}</b>（${cur.arrive != null ? `${R.fmt(cur.arrive)}〜${R.fmt(cur.depart)}` : "—"}）${next ? `<br>つぎ：${pl.stops.indexOf(next) + 1}　${esc(spotById[next.spot].name)}（${R.fmt(next.arrive)}）` : "<br>この場所で最後です"}</div>
+      ${canRebuild ? `<button class="btn accent block" data-act="rebuild">組み直す（${left}）</button>` : `<button class="btn primary block" data-act="premium">有料会員で無制限に（初月無料）</button>`}
+      <div class="small" style="text-align:center;margin:6px 0 4px">無料でも条件はすべて使えます。有料会員は回数無制限と通知つき。</div>
+      <div class="demo-panel"><div class="small"><b>デモ操作</b>（本番では位置情報と天気で自動）</div>
+        <div class="row">
+          <button class="toggle" data-act="d-next">次の場所へ進む</button>
+          <button class="toggle ${state.closed.includes(cur.spot) ? "on" : ""}" data-act="d-closed">ここが閉まっていた</button>
+          <button class="toggle ${state.rain ? "on" : ""}" data-act="d-rain">雨にする</button>
+          <button class="toggle ${state.delay ? "on" : ""}" data-act="d-delay">30分遅らせる</button>
+          <button class="toggle" data-act="d-reset">最初に戻す</button>
+        </div></div>
+      <div class="cond"><span>営業中</span><span>天気</span><span>予算</span><span>歩く距離 30分まで</span><span>遅れ</span><span>お気に入りの記録を優先</span></div>
+      <div class="timeline">${items}</div>`;
+  }
+
+  function setSheet(s, remember = true) {
+    const el = $("#sheet"); el.classList.remove("peek", "half", "full"); el.classList.add(s);
+    if (remember) state.sheetBy[stage()] = s;
+    clearTimeout(setSheet._t); setSheet._t = setTimeout(refreshBubbles, 320);
+  }
   function initSheet() {
     const el = $("#sheet"), handle = $("#sheet-handle");
     let y0 = null;
@@ -222,7 +489,121 @@
       else if (dy < 0) setSheet(order[Math.min(2, i + 1)]);
       else setSheet(order[Math.max(0, i - 1)]);
     });
-    $("#sheet-head").addEventListener("click", () => { if (cur() === "peek") setSheet("half"); });
+    $("#sheet-head").addEventListener("click", (e) => { if (!e.target.closest("a") && cur() === "peek") setSheet("half"); });
+  }
+
+  /* ---------- つくる ---------- */
+  function toggleDraftSpot(spotId) {
+    const d = state.draft, i = d.stops.findIndex((s) => s.spot === spotId), sp = spotById[spotId];
+    if (i >= 0) { d.stops.splice(i, 1); toast(`${sp.name}を予定から外しました`); }
+    else { d.stops.push({ spot: spotId, stay: defaultStay(sp) }); toast(`${d.stops.length}　${sp.name}を予定に入れました`); }
+    d.dirty = true;
+    drawMap(false); renderSheet();
+  }
+  // 記事から予定をつくる。how = "replace"（書いた人のルートで始める）/ "append"（つくっている予定の後ろに足す）
+  function useRecord(recId, how) {
+    const r = recById[recId], w = writerById[r.writer];
+    const add = r.spots.map((s) => ({ spot: s.spot, stay: s.stay || defaultStay(spotById[s.spot]) }));
+    const d = state.draft;
+    if (how === "append") {
+      const have = new Set(d.stops.map((s) => s.spot));
+      const fresh = add.filter((a) => !have.has(a.spot));
+      if (!fresh.length) { toast("もう予定に入っています"); return; }
+      d.stops.push(...fresh); d.dirty = true;
+      toast(`${fresh.length}か所を予定の後ろに足しました`);
+    } else {
+      if (d.stops.length && d.dirty && !confirm("つくりかけの予定を、この記事のルートで置き換えますか？")) return;
+      state.draft = newDraft({ name: r.type === "route" ? r.title : "", start: R.toMin(r.start || "10:00"), stops: add, from: r.id });
+      toast(`${w.name}さんの${r.type === "route" ? "ルート" : "場所"}を入れました`);
+    }
+    state.planMode = "make"; state.fitNext = true;
+    switchView("plan");
+  }
+  function saveDraft() {
+    const d = state.draft;
+    if (!d.stops.length) { toast("場所を1つ以上入れてください"); return; }
+    if (!d.name.trim()) {
+      setSheet("full"); toast("予定の名前を入れてください");
+      setTimeout(() => { const f = $("#mk-name"); if (f) f.focus(); }, 300);
+      return;
+    }
+    const plan = { id: d.id || "p" + Date.now(), name: d.name.trim(), start: d.start, stops: d.stops.map((s) => ({ ...s })), from: d.from };
+    const i = state.plans.findIndex((p) => p.id === plan.id);
+    if (i >= 0) state.plans[i] = plan; else state.plans.unshift(plan);
+    // たどっている途中の予定を直したときは、たどる側も新しい予定にする
+    if (state.plan && state.plan.planId === plan.id) state.plan = null;
+    d.id = plan.id; d.dirty = false;
+    toast(i >= 0 ? "上書き保存しました" : "保存しました。「たどる」から選べます");
+    renderSheet();
+  }
+  function onMake(t) {
+    const d = state.draft, mk = t.dataset.mk, i = Number(t.dataset.i);
+    if (mk === "save") return saveDraft();
+    if (mk === "expand") return setSheet("full");
+    if (mk === "follow") return startFollow(d.id);
+    if (mk === "new") {
+      if (d.dirty && d.stops.length && !confirm("つくりかけの予定を消して、新しくつくりますか？")) return;
+      state.draft = newDraft(); renderSheet(); drawMap(false); return;
+    }
+    if (mk === "stay") d.stops[i].stay = Math.min(360, Math.max(15, d.stops[i].stay + Number(t.dataset.d)));
+    if (mk === "up" && i > 0) [d.stops[i - 1], d.stops[i]] = [d.stops[i], d.stops[i - 1]];
+    if (mk === "down" && i < d.stops.length - 1) [d.stops[i + 1], d.stops[i]] = [d.stops[i], d.stops[i + 1]];
+    if (mk === "del") { toast(`${spotById[d.stops[i].spot].name}を予定から外しました`); d.stops.splice(i, 1); }
+    d.dirty = true;
+    renderSheet();
+    if (mk !== "stay") drawMap(false);
+  }
+
+  /* ---------- たどる ---------- */
+  function startFollow(planId, reset) {
+    const p = state.plans.find((x) => x.id === planId);
+    if (!p) return;
+    if (reset || !state.plan || state.plan.planId !== planId) {
+      state.plan = { planId, title: p.name, stops: schedule(p.start, p.stops), cur: 0 };
+      state.rain = false; state.rainHandled = false; state.delay = 0; state.closed = []; state.pending = null;
+    }
+    state.planMode = "follow"; state.followList = false; state.fitNext = true; state.sheetBy.follow = "half";
+    switchView("plan");
+  }
+  function editPlan(planId) {
+    const p = state.plans.find((x) => x.id === planId);
+    if (!p) return;
+    const d = state.draft;
+    if (d.dirty && d.stops.length && d.id !== planId && !confirm("つくりかけの予定を、この予定で置き換えますか？")) return;
+    state.draft = newDraft({ id: p.id, name: p.name, start: p.start, stops: p.stops.map((s) => ({ ...s })), from: p.from });
+    state.planMode = "make"; state.fitNext = true;
+    switchView("plan");
+  }
+  function onFollow(t) {
+    const fl = t.dataset.fl, id = t.dataset.id;
+    if (fl === "pick") startFollow(id);
+    if (fl === "edit") editPlan(id);
+    if (fl === "make") openPlan("make");
+    if (fl === "list") { state.followList = true; renderSheet(); drawMap(true); }
+    if (fl === "del") {
+      const p = state.plans.find((x) => x.id === id);
+      if (!p || !confirm(`「${p.name}」を消しますか？（試作なので、開き直すと元に戻ります）`)) return;
+      state.plans.splice(state.plans.indexOf(p), 1);
+      if (state.plan && state.plan.planId === id) state.plan = null;
+      if (state.draft.id === id) state.draft.id = null;
+      renderSheet(); drawMap(false); toast("予定を消しました");
+    }
+  }
+  function onFollowAct(act) {
+    const pl = state.plan, cur = pl && pl.stops[pl.cur];
+    if (!pl) return;
+    if (act === "d-next") {
+      if (pl.cur < pl.stops.length - 1) { pl.cur++; while (pl.stops[pl.cur] && pl.stops[pl.cur].status === "dropped" && pl.cur < pl.stops.length - 1) pl.cur++; }
+      else toast("最後の場所に着きました");
+      renderSheet(); drawMap(false); return;
+    }
+    if (act === "d-closed") { const i = state.closed.indexOf(cur.spot); if (i >= 0) state.closed.splice(i, 1); else state.closed.push(cur.spot); }
+    if (act === "d-rain") { state.rain = !state.rain; state.rainHandled = false; }
+    if (act === "d-delay") state.delay = state.delay ? 0 : 30;
+    if (act === "d-reset") return startFollow(pl.planId, true);
+    if (act === "rebuild") return doRebuild();
+    if (act === "premium") { state.premium = true; toast("デモ：有料会員（初月無料）になりました"); }
+    renderSheet();
   }
 
   /* ---------- 重なる画面（記事・書き手・組み直し） ---------- */
@@ -241,8 +622,7 @@
   function refreshView() {
     const v = state.view;
     if (v === "read") renderRead();
-    if (v === "map") renderSheet();
-    if (v === "plan") renderPlan();
+    if (v === "map" || v === "plan") { renderSheet(); drawMap(false); }
     if (v === "me") renderMe();
   }
   function closePanels() { stack.length = 0; paint(); }
@@ -280,7 +660,12 @@
       ? `<div class="lock"><b>メンバー限定</b><div>${esc(r.member.body)}</div></div>`
       : `<div class="lock"><b>${ICON.lock} メンバー限定</b><div style="margin:4px 0 10px">${esc(r.member.teaser)}</div>
           <button class="btn primary small" id="join-btn">メンバーになって読む（月${w.membership.price}円）</button></div>`) : "";
-    const cta = r.type === "route" ? `<div class="sticky-cta"><button class="btn accent block" id="import-btn">このルートを予定に取り込む（無料）</button></div>` : "";
+    // つくるの途中で開いたときは「足す」、それ以外は書いた人のルートで「つくる」
+    const n = r.spots.length;
+    const appending = state.view === "plan" && state.planMode === "make" && state.draft.stops.length > 0;
+    const fresh = appending ? r.spots.filter((s) => !state.draft.stops.some((x) => x.spot === s.spot)).length : n;
+    const ctaLabel = appending ? (!fresh ? "この記事の場所は、もう予定に入っています" : n > 1 ? `このルートを予定の後ろに足す（${fresh}か所）` : "この場所を予定に足す") : (n > 1 ? "このルートで予定をつくる（無料）" : "この場所から予定をつくる");
+    const cta = `<div class="sticky-cta"><button class="btn accent block" id="make-btn" ${appending && !fresh ? "disabled" : ""}>${ICON.calplus}${ctaLabel}</button>${appending ? `<div class="small" style="text-align:center;margin-top:6px">つくっている予定（${state.draft.stops.length}か所）の後ろに足します</div>` : ""}</div>`;
     p.innerHTML = bar(w.official ? "公式の特集" : "記事") + `<div class="pad">
       <div class="writer-row"><button data-writer="${w.id}" style="display:flex;align-items:center;gap:10px">${avatar(w)}<span class="name">${esc(w.name)}</span></button>${badges(w, r)}<span style="margin-left:auto">${favBtn}</span></div>
       <div class="h1">${esc(r.title)}</div>
@@ -295,8 +680,7 @@
     if (fb) fb.addEventListener("click", () => { toggleFav(w.id); paint(); });
     const jb = $("#join-btn", p);
     if (jb) jb.addEventListener("click", () => { V.memberships.push(w.id); toast("デモ：メンバーになりました"); paint(); });
-    const ib = $("#import-btn", p);
-    if (ib) ib.addEventListener("click", () => importRoute(r.id));
+    $("#make-btn", p).addEventListener("click", () => useRecord(r.id, appending ? "append" : "replace"));
     // 場所の登録（自分のマップに出る）。画面を描き直さず、ボタンだけ変える
     $$("[data-save]", p).forEach((b) => b.addEventListener("click", () => {
       const on = toggleSaved(b.dataset.save);
@@ -346,92 +730,7 @@
     $$("[data-rec]", p).forEach((c) => c.addEventListener("click", () => openArticle(c.dataset.rec)));
   }
 
-  /* ---------- 予定と組み直し ---------- */
-  function importRoute(recId) {
-    const r = recById[recId];
-    const stops = R.buildSchedule(D, r);
-    state.plan = { recordId: recId, title: r.title, stops, cur: 0 };
-    state.rain = false; state.delay = 0; state.closed = []; state.pending = null;
-    state.planMode = "follow";
-    closePanels(); switchView("plan");
-    toast("予定に取り込みました");
-    drawMap(false);
-  }
-
-  // 予定の上の切り替え（つくる／たどる）。役割はあとで決める
-  function planSeg() {
-    return `<div class="seg plan-seg">${[["make", "つくる"], ["follow", "たどる"]].map(([k, l]) => `<button data-pm="${k}" class="${state.planMode === k ? "on" : ""}">${l}</button>`).join("")}</div>`;
-  }
-  function bindPlanSeg(el) {
-    $$("[data-pm]", el).forEach((b) => b.addEventListener("click", () => { state.planMode = b.dataset.pm; renderPlan(); }));
-  }
-  function renderPlan() {
-    const el = $("#view-plan");
-    if (state.planMode === "make") {
-      el.innerHTML = `<div class="plan-head">${planSeg()}<div class="small">予定</div><div class="h1" style="margin-top:0">予定をつくる</div></div>
-        <div class="pad" style="padding-top:4px">
-          <div class="soon"><b>この画面はこれから作ります（試作）</b><div class="small">お気に入りのマップから、今から行ける所で予定を作る画面にする予定です。</div></div>
-          <button class="btn primary block" id="go-route">記事のルートから取り込む（ゆうさんの大宮のルート）</button>
-        </div>`;
-      bindPlanSeg(el);
-      $("#go-route").addEventListener("click", () => openArticle("y1"));
-      return;
-    }
-    if (!state.plan) {
-      el.innerHTML = `<div class="plan-head">${planSeg()}<div class="h1">今日の予定</div></div>
-        <div class="empty">記事のルートを取り込むと、ここに予定が出ます。<br><br><button class="btn primary" id="go-route">ゆうさんの大宮のルートを見る</button></div>`;
-      bindPlanSeg(el);
-      $("#go-route").addEventListener("click", () => openArticle("y1"));
-      return;
-    }
-    const pl = state.plan, cur = pl.stops[pl.cur];
-    const curSpot = spotById[cur.spot];
-    const items = pl.stops.map((s, i) => {
-      const sp = spotById[s.spot];
-      const st = i < pl.cur ? "done" : i === pl.cur ? "now" : "";
-      const ch = s.status === "replaced" ? '<span class="change replaced">組み直し</span>' : s.status === "shifted" ? '<span class="change shifted">時間がずれた</span>' : s.status === "shortened" ? '<span class="change shortened">短く</span>' : s.status === "dropped" ? '<span class="change dropped">中止</span>' : "";
-      const closedNow = state.closed.includes(s.spot) ? '<span class="change replaced">臨時休業</span>' : "";
-      const walk = s.walk && s.arrive != null ? `<div class="tl-walk">${s.walkFrom ? esc(s.walkFrom) + "から" : ""}歩いて${s.walk}分</div>` : "";
-      const from = s.replacedFrom ? `<div class="small">${esc(spotById[s.replacedFrom].name)}の代わり</div>` : "";
-      return `${i > 0 ? `<div class="tl-item"><div></div><div class="tl-line"></div><div>${walk}</div></div>` : ""}
-        <div class="tl-item"><div class="tl-time">${s.arrive != null ? R.fmt(s.arrive) : "—"}</div><div class="tl-line"><span class="tl-dot ${st}"></span></div>
-        <div class="tl-card ${st} ${s.status === "replaced" ? "replaced" : ""} ${s.status === "dropped" ? "dropped" : ""}">
-          <b>${esc(sp.name)}</b>${ch}${closedNow}
-          <div class="small">${sp.indoor ? "屋内" : "屋外"}・${s.stay}分${sp.hours ? `・${sp.hours.open}〜${sp.hours.close}` : ""}</div>${from}
-        </div></div>`;
-    }).join("");
-    const alert = [];
-    if (state.closed.includes(cur.spot)) alert.push(`<b>${esc(curSpot.name)}が臨時休業でした</b>同じ系統で、歩いて行ける店を探せます。`);
-    if (state.rain && !state.rainHandled) alert.push(`<b>雨が降り出しました</b>屋外の予定を、屋内の場所に替えられます。`);
-    if (state.delay) alert.push(`<b>予定より${state.delay}分遅れています</b>閉まる時間に間に合うように並べ直せます。`);
-    const left = state.premium ? "無制限" : `今月の残り${V.rebuildsLeft}回`;
-    const canRebuild = state.premium || V.rebuildsLeft > 0;
-    el.innerHTML = `<div class="plan-head">${planSeg()}<div class="small">今日の予定</div><div class="h1" style="margin-top:0">${esc(pl.title)}</div></div>
-      ${alert.map((a) => `<div class="alert">${a}</div>`).join("")}
-      <div class="cond"><span>営業中</span><span>天気</span><span>予算</span><span>歩く距離 30分まで</span><span>遅れ</span><span>お気に入りの記録を優先</span></div>
-      <div class="demo-panel"><div class="small"><b>デモ操作</b>（本番では位置情報と天気で自動）</div>
-        <div class="row">
-          <button class="toggle" id="d-next">次の場所へ進む</button>
-          <button class="toggle ${state.closed.includes(cur.spot) ? "on" : ""}" id="d-closed">ここが閉まっていた</button>
-          <button class="toggle ${state.rain ? "on" : ""}" id="d-rain">雨にする</button>
-          <button class="toggle ${state.delay ? "on" : ""}" id="d-delay">30分遅らせる</button>
-          <button class="toggle" id="d-reset">最初に戻す</button>
-        </div></div>
-      <div class="timeline">${items}</div>
-      <div class="sticky-cta">
-        ${canRebuild ? `<button class="btn accent block" id="rebuild-btn">組み直す（${left}）</button>` : `<button class="btn primary block" id="premium-btn">有料会員で無制限に（初月無料）</button>`}
-        <div class="small" style="text-align:center;margin-top:6px">無料でも条件はすべて使えます。有料会員は回数無制限と通知つき。</div>
-      </div>`;
-    bindPlanSeg(el);
-    $("#d-next").addEventListener("click", () => { if (pl.cur < pl.stops.length - 1) { pl.cur++; while (pl.stops[pl.cur] && pl.stops[pl.cur].status === "dropped" && pl.cur < pl.stops.length - 1) pl.cur++; } else toast("最後の場所に着きました"); renderPlan(); drawMap(false); });
-    $("#d-closed").addEventListener("click", () => { const i = state.closed.indexOf(cur.spot); if (i >= 0) state.closed.splice(i, 1); else state.closed.push(cur.spot); renderPlan(); });
-    $("#d-rain").addEventListener("click", () => { state.rain = !state.rain; state.rainHandled = false; renderPlan(); });
-    $("#d-delay").addEventListener("click", () => { state.delay = state.delay ? 0 : 30; renderPlan(); });
-    $("#d-reset").addEventListener("click", () => importRoute(pl.recordId));
-    const rb = $("#rebuild-btn"); if (rb) rb.addEventListener("click", doRebuild);
-    const pb = $("#premium-btn"); if (pb) pb.addEventListener("click", () => { state.premium = true; toast("デモ：有料会員（初月無料）になりました"); renderPlan(); });
-  }
-
+  /* ---------- 組み直し ---------- */
   function doRebuild() {
     const pl = state.plan, cur = pl.stops[pl.cur];
     const atClosed = state.closed.includes(cur.spot);
@@ -492,12 +791,12 @@
       if (!state.premium) V.rebuildsLeft = Math.max(0, V.rebuildsLeft - 1);
       if (state.rain) state.rainHandled = true;
       state.delay = 0; state.pending = null;
-      closePanels(); renderPlan(); drawMap(false);
+      closePanels(); renderSheet(); drawMap(false);
       toast("新しい予定にしました");
     });
   }
 
-  /* ---------- 記録 ---------- */
+  /* ---------- 記録（いまはタブから外している） ---------- */
   const draft = { items: {}, title: "", vis: {} };
   function recordCandidates() {
     if (!state.plan) return ["omiya-lib", "r-nagi", "c-hidamari"].map((id) => ({ spot: id }));
@@ -506,7 +805,7 @@
   function renderRecord() {
     const el = $("#view-record");
     const cands = recordCandidates();
-    if (!draft.title) draft.title = state.plan ? state.plan.title.replace("の1日", "の1日（組み直し版）") : "大宮で寄った場所";
+    if (!draft.title) draft.title = state.plan ? state.plan.title + "（記録）" : "大宮で寄った場所";
     const items = cands.map((s) => {
       const sp = spotById[s.spot], d = draft.items[sp.id] || (draft.items[sp.id] = { on: true, rating: 3, note: "", vis: "public", photo: null });
       return `<div class="rec-item" data-spot="${sp.id}">
@@ -608,20 +907,22 @@
     const head = `<span class="cover-word">${esc(spotById[r.spots[0].spot].kind)}</span>
       <span class="tag-label" style="background:${tagColor(tag)}">#${esc(tag)}</span>
       <span class="thumb-map">${routeThumb(r)}</span>`;
+    // 記事ごとの「つくる」：書いた人のルートを先に入れて、つくるを開く
+    const make = `<button class="make-btn" data-make="${r.id}" aria-label="この記事から予定をつくる">${ICON.calplus}つくる</button>`;
     if (!big) {
-      return `<button class="tile cover" data-rec="${r.id}" style="${coverStyle(r)}">${head}
+      return `<div class="tile cover" role="button" tabindex="0" data-rec="${r.id}" style="${coverStyle(r)}">${head}
         <span class="cover-body"><span class="cover-title">${esc(r.title)}</span>
-        <span class="cover-who">${avatar(w, "sm")}<b>${esc(w.name)}</b></span></span></button>`;
+        <span class="cover-who">${avatar(w, "sm")}<b>${esc(w.name)}</b>${make}</span></span></div>`;
     }
     const lock = r.member ? `<span>${ICON.lock.replace('width="16" height="16"', 'width="13" height="13"')} メンバー限定あり</span>` : "";
     const mark = w.official ? '<span class="badge official">公式</span>' : fk === "fav" ? '<span class="badge fav">お気に入り</span>' : "";
-    return `<button class="hero cover" data-rec="${r.id}" style="${coverStyle(r)}">${head}
+    return `<div class="hero cover" role="button" tabindex="0" data-rec="${r.id}" style="${coverStyle(r)}">${head}
       <span class="cover-body">
         <span class="cover-title">${esc(r.title)}</span>
         <span class="cover-note">${esc(r.spots[0].note)}</span>
         <span class="cover-who">${avatar(w, "sm")}<b>${esc(w.name)}</b>${mark}<small>${routeSummary(r)}</small></span>
-        <span class="cover-stats"><span>${ICON.walk} 行った ${r.went.toLocaleString()}</span>${lock}</span>
-      </span></button>`;
+        <span class="cover-stats"><span>${ICON.walk} 行った ${r.went.toLocaleString()}</span>${lock}${make}</span>
+      </span></div>`;
   }
   function renderRead() {
     const el = $("#view-read");
@@ -674,7 +975,7 @@
           <div class="stat"><b>${allSpots.length}</b><span>行った場所</span></div>
           <div class="stat"><b>${V.saved.length}</b><span>登録した場所</span></div>
         </div>
-        <div class="small">組み直し：${state.premium ? "有料会員（無制限）" : `今月の残り${V.rebuildsLeft}回（無料は月5回）`}</div>
+        <div class="small">組み直し：${state.premium ? "有料会員（無制限）" : `今月の残り${V.rebuildsLeft}回（無料は月5回）`}・保存した予定 ${state.plans.length}件</div>
         <div class="section-label">自分の地図</div>
         <div class="mymap-preview">
           <div class="minimap" id="mm-me"></div>
@@ -795,20 +1096,32 @@
   function closePlanMenu() { planTab().classList.remove("open"); }
   function switchView(v) {
     state.view = v; closePanels(); closePlanMenu();
-    $$(".view").forEach((s) => s.classList.toggle("active", s.id === "view-" + v));
+    const sec = v === "plan" ? "map" : v; // 予定（つくる／たどる）は探すと同じ地図の画面を使う
+    $$(".view").forEach((s) => s.classList.toggle("active", s.id === "view-" + sec));
     $$("#tabbar [data-view]").forEach((b) => b.classList.toggle("on", b.dataset.view === v));
     if (v === "read") renderRead();
-    if (v === "map") {
-      // 地図は最初に「探す」を開いたときに作る（隠れたまま作ると大きさがずれるため）
-      if (!map) { initMap(); drawMap(false); }
-      setTimeout(() => { if (map) { map.invalidateSize(); updateArea(); } }, 30);
-    }
-    if (v === "plan") renderPlan();
+    if (v === "map" || v === "plan") enterStage();
     if (v === "record") renderRecord();
     if (v === "me") renderMe();
   }
+  // 探す／つくる／たどる に入る。地図はそのままにして、上と下の中身を入れ替える
+  function enterStage() {
+    // 地図は最初に開いたときに作る（隠れたまま作ると大きさがずれるため）
+    if (!map) initMap();
+    renderTop();
+    setSheet(state.sheetBy[stage()], false);
+    renderSheet();
+    const fit = state.fitNext; state.fitNext = false;
+    setTimeout(() => {
+      if (!map) return;
+      map.invalidateSize();
+      drawMap(fit);
+      if (stage() === "explore") updateArea();
+    }, 30);
+  }
   function openPlan(mode) {
     state.planMode = mode;
+    if (mode === "follow") state.followList = true; // たどるを押したら、まず保存した予定を選ぶ
     // マウスで選んだあとも、ポインタが離れるまでメニューが出たままにならないようにする
     // （指で操作するときは mouseleave が来ないので付けない）
     const t = planTab();
@@ -822,18 +1135,42 @@
   /* ---------- 起動 ---------- */
   document.addEventListener("DOMContentLoaded", () => {
     renderRead(); renderChips(); renderSheet(); initSheet();
-    $("#chips").addEventListener("click", (e) => { const b = e.target.closest("[data-tag]"); if (!b) return; state.tag = b.dataset.tag || null; renderChips(); drawMap(true); scheduleArea(); });
-    $("#modes").addEventListener("click", (e) => { const b = e.target.closest("[data-mode]"); if (!b) return; state.mode = b.dataset.mode; renderChips(); drawMap(true); scheduleArea(); });
-    $("#sheet-body").addEventListener("click", (e) => { const c = e.target.closest("[data-rec]"); if (c) openArticle(c.dataset.rec); });
+    const refilter = () => { renderChips(); drawMap(stage() === "explore"); if (stage() === "explore") scheduleArea(); else renderSheet(); };
+    $("#chips").addEventListener("click", (e) => { const b = e.target.closest("[data-tag]"); if (!b) return; state.tag = b.dataset.tag || null; refilter(); });
+    $("#modes").addEventListener("click", (e) => { const b = e.target.closest("[data-mode]"); if (!b) return; state.mode = b.dataset.mode; refilter(); });
+    $("#stage-bar").addEventListener("click", (e) => { const b = e.target.closest("[data-stage]"); if (b) openPlan(b.dataset.stage); });
+
+    // 下のシート（探す・つくる・たどる）
+    const sb = $("#sheet-body");
+    sb.addEventListener("click", (e) => {
+      const t = e.target.closest("[data-mk],[data-fl],[data-act],[data-rec]");
+      if (!t) return;
+      if (t.dataset.mk) onMake(t);
+      else if (t.dataset.fl) onFollow(t);
+      else if (t.dataset.act === "fit-all") drawMap(true);
+      else if (t.dataset.act) onFollowAct(t.dataset.act);
+      else if (t.dataset.rec) openArticle(t.dataset.rec);
+    });
+    sb.addEventListener("input", (e) => { if (e.target.id === "mk-name") { state.draft.name = e.target.value; state.draft.dirty = true; } });
+    sb.addEventListener("change", (e) => {
+      if (e.target.id === "mk-start" && e.target.value) { state.draft.start = R.toMin(e.target.value); state.draft.dirty = true; renderSheet(); }
+    });
 
     // 読む
-    $("#view-read").addEventListener("click", (e) => {
+    const rv = $("#view-read");
+    rv.addEventListener("click", (e) => {
+      const mk = e.target.closest("[data-make]");
+      if (mk) { useRecord(mk.dataset.make, "replace"); return; }
+      const card = e.target.closest("[data-rec]");
+      if (card) { openArticle(card.dataset.rec); return; }
       const t = e.target.closest("button"); if (!t) return;
-      if (t.dataset.rec) openArticle(t.dataset.rec);
-      else if (t.dataset.rtag !== undefined) { state.readTag = t.dataset.rtag || null; renderRead(); }
+      if (t.dataset.rtag !== undefined) { state.readTag = t.dataset.rtag || null; renderRead(); }
       else if (t.id === "today-btn") openPlan("make");
       else if (t.id === "read-search") switchView("map");
       else if (t.id === "bell") toast("お知らせはまだありません（試作）");
+    });
+    rv.addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === " ") && e.target.matches("[data-rec]")) { e.preventDefault(); openArticle(e.target.dataset.rec); }
     });
 
     // 下のタブ
