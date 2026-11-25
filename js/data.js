@@ -134,6 +134,13 @@
     memberships: [],                         // 入っているメンバーシップ（なし）
     plan: "free",                            // free / premium
     rebuildsLeft: 5,
+    // 登録した場所（行きたい場所）。自分のマップに出る
+    saved: [
+      { spot: "r-nagi", memo: "昼だけの営業。土曜の昼に行く" },
+      { spot: "bonsai", memo: "" },
+      { spot: "c-hidamari", memo: "雨の日の避難先" },
+      { spot: "lib-ishikawa", memo: "金沢に行くときに必ず" },
+    ],
   };
 
   const data = { TAGS, writers, spots, records, viewer };

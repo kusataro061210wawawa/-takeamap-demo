@@ -16,8 +16,11 @@
 </head>
 <body>
   <div id="app">
-    <!-- 地図（ホーム） -->
-    <section id="view-map" class="view active">
+    <!-- 読む（最初の画面） -->
+    <section id="view-read" class="view active"></section>
+
+    <!-- 探す（地図） -->
+    <section id="view-map" class="view">
       <div id="map"></div>
       <div class="map-top">
         <div class="search">
@@ -35,21 +38,28 @@
       </div>
     </section>
 
-    <!-- 予定 -->
+    <!-- 予定（つくる／たどる） -->
     <section id="view-plan" class="view"></section>
-    <!-- 記録 -->
+    <!-- 記録（いまはタブから外している。書く画面を作るときに使う） -->
     <section id="view-record" class="view"></section>
-    <!-- 自分 -->
+    <!-- マイページ -->
     <section id="view-me" class="view"></section>
 
-    <!-- 上に重なる画面（記事・書き手・組み直しの結果） -->
+    <!-- 上に重なる画面（記事・書き手・組み直しの結果・自分のマップ） -->
     <section id="panel" class="panel"></section>
 
     <nav class="tabbar" id="tabbar">
-      <button data-view="map" class="on"><svg viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>地図</button>
-      <button data-view="plan"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>予定</button>
-      <button data-view="record"><svg viewBox="0 0 24 24"><path d="M5 19l1-4L16 5l3 3L9 18l-4 1z"/></svg>記録</button>
-      <button data-view="me"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="4"/><path d="M4 20c1.5-4 4.5-5 8-5s6.5 1 8 5"/></svg>自分</button>
+      <button data-view="read" class="on"><svg viewBox="0 0 24 24"><path d="M12 7c-2-1.6-5-2.2-8-1.7v13c3-.5 6 .1 8 1.7 2-1.6 5-2.2 8-1.7v-13c-3-.5-6 .1-8 1.7z"/><path d="M12 7v13"/></svg>読む</button>
+      <button data-view="map"><svg viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>探す</button>
+      <div class="tab-write-wrap"><button class="tab-write" id="write-btn" aria-label="記事を書く"><svg viewBox="0 0 24 24"><path d="M4 20l1.2-4.6L15.5 5.1a2 2 0 012.8 0l.6.6a2 2 0 010 2.8L8.6 18.8z"/><path d="M14 6.5l3.5 3.5"/></svg></button></div>
+      <div class="tab-plan" id="tab-plan">
+        <div class="plan-menu" id="plan-menu">
+          <button data-plan="make"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M12 12.5v5M9.5 15h5"/></svg>つくる</button>
+          <button data-plan="follow"><svg viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a3 3 0 000-6h-4a3 3 0 010-6h6"/></svg>たどる</button>
+        </div>
+        <button data-view="plan" id="plan-tab"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>予定</button>
+      </div>
+      <button data-view="me"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="4"/><path d="M4 20c1.5-4 4.5-5 8-5s6.5 1 8 5"/></svg>マイページ</button>
     </nav>
     <div id="toast" class="toast"></div>
   </div>
