@@ -31,6 +31,7 @@
     chev: '<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>',
     walk: '<svg viewBox="0 0 24 24"><circle cx="13" cy="4.5" r="2"/><path d="M9.5 21l2.2-6.5 3 3V21M8 12l1.5-4 3.5-1 2.5 3.5 3 1M11.7 14.5L13 7"/></svg>',
     calplus: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M12 12.5v5M9.5 15h5"/></svg>',
+    grip: '<svg viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg>',
   };
   const VIS = [["public", "公開"], ["member", "メンバー限定"], ["private", "非公開"]];
   const visLabel = (k) => (VIS.find((v) => v[0] === k) || VIS[0])[1];
@@ -41,9 +42,10 @@
   const state = {
     tag: null, mode: "fav", view: "read",
     readTag: null,           // 読む：選んでいるタグ（null = おすすめ）
-    planMode: "make",        // 予定：make（つくる）/ follow（たどる）
+    planMode: "make",        // 予定：make（つくる）/ follow（たどる）/ redo（組み直しで、行く場所を自分で選ぶ）
     followList: true,        // たどる：保存した予定の一覧を出しているか
-    sheetBy: { explore: "peek", make: "peek", follow: "half" }, // 下のシートの高さ（画面ごとに覚える）
+    sheetBy: { explore: "peek", make: "peek", follow: "half", redo: "half" }, // 下のシートの高さ（画面ごとに覚える）
+    redo: null,              // 組み直しを自分で選んでいる途中 { d（つくると同じ形）, done, atClosed, closedName, auto }
     fitNext: false,          // 次に地図を出すとき、予定の場所に合わせて動かすか
     myMapFilter: "all",      // 自分のマップ：all / rec / saved
     draft: newDraft(),       // つくる
@@ -182,6 +184,11 @@
   /* ---------- 地図（探す・つくる・たどる で同じ地図を使う） ---------- */
   let map, layer, bubbleLayer, pinInfo = [];
   const stage = () => (state.view === "plan" ? state.planMode : "explore");
+  // いま地図で直している予定：つくる＝state.draft、組み直しで自分で選ぶ＝state.redo.d（先頭の lockN か所は「いまいる場所」で動かせない）
+  const ed = () => (stage() === "redo" && state.redo ? state.redo.d : state.draft);
+  const lockN = (d) => d.lockN || 0;
+  const numOf = (d, i) => (d.base || 0) + i + 1; // 画面に出す番号（組み直しは、たどっている予定の番号のまま）
+  const editing = () => stage() === "make" || stage() === "redo";
   function initMap() {
     if (typeof L === "undefined") { $("#map").innerHTML = '<div class="empty">地図を読み込めませんでした。インターネットにつながっているか確認してください。</div>'; return; }
     // 出典は下のシートに表示する（シートで隠れないように）
@@ -251,7 +258,7 @@
     const st = stage();
     let pts = [];
     if (st === "explore") pts = drawRecords(false);
-    if (st === "make") { const rp = drawRecords(true), dp = drawDraft(); pts = dp.length ? dp : rp; }
+    if (st === "make" || st === "redo") { const rp = drawRecords(true), dp = drawDraft(); pts = dp.length ? dp : rp; }
     if (st === "follow") pts = drawFollow();
     if (fit && pts.length) fitTo(pts);
     refreshBubbles();
@@ -264,7 +271,8 @@
   function drawRecords(make) {
     const recs = visibleRecords();
     const seen = {}, pts = [];
-    const inDraft = new Set(make ? state.draft.stops.map((s) => s.spot) : []);
+    const inDraft = new Set(make ? ed().stops.map((s) => s.spot) : []);
+    if (make && stage() === "redo") state.redo.done.forEach((id) => inDraft.add(id)); // もう行った場所は候補に出さない
     recs.forEach((r) => {
       const w = writerById[r.writer], fk = favKind(r.writer, r);
       const color = r.official ? "#E86B45" : fk ? w.color : "#A9B2AC";
@@ -335,15 +343,26 @@
     el.addEventListener("contextmenu", (e) => e.preventDefault());
   }
 
-  // つくる：選んだ順に 1, 2, 3… と番号をつけ、線でつなぐ。番号の下に着く時刻。長押しで順番を選べる
+  // つくる・組み直し：選んだ順に 1, 2, 3… と番号をつけ、線でつなぐ。番号の下に着く時刻。長押しで順番を入れ替える
   function drawDraft() {
-    const stops = state.draft.stops, sch = schedule(state.draft.start, stops);
+    const d = ed(), lk = lockN(d), stops = d.stops, sch = schedule(d.start, stops);
     const ll = stops.map((x) => [spotById[x.spot].lat, spotById[x.spot].lng]);
+    // 組み直し：もう行った場所は薄く出す
+    if (stage() === "redo") {
+      const dl = state.redo.done.map((id) => [spotById[id].lat, spotById[id].lng]);
+      if (dl.length) L.polyline([...dl, ll[0]], { color: "#8A968E", weight: 3, dashArray: "2 7", opacity: 0.8, interactive: false }).addTo(layer);
+      state.redo.done.forEach((id, k) => addPin(dl[k], numPin(k + 1, "", "fl done"), { half: 14, prio: 1, sp: spotById[id], num: k + 1, fl: true }, null, 200));
+    }
     if (ll.length > 1) L.polyline(ll, { color: "#E86B45", weight: 4.5, opacity: 0.9, interactive: false }).addTo(layer);
     stops.forEach((x, i) => {
       const b = bestRecordFor(x.spot), sp = spotById[x.spot], a = sch[i];
-      const warn = !!hoursWarn(sp, a.arrive, a.depart);
-      const m = addPin(ll[i], numPin(i + 1, R.fmt(a.arrive), "", warn), { half: 14, below: TIME_H, prio: 10, sp, r: b && b.r, s: b && b.s, num: i + 1 }, () => {
+      const info = { half: 14, below: TIME_H, prio: 10, sp, r: b && b.r, s: b && b.s, num: numOf(d, i) };
+      if (i < lk) { // いまいる場所（動かせない）
+        addPin(ll[i], numPin(numOf(d, i), state.redo && state.redo.atClosed ? "" : R.fmt(a.arrive), "fl now"), { ...info, fl: true }, () => b && openArticle(b.r.id), 900);
+        return;
+      }
+      const warn = !!stopWarn(sp, a);
+      const m = addPin(ll[i], numPin(numOf(d, i), R.fmt(a.arrive), "", warn), info, () => {
         if (longFired) { longFired = false; return; }
         toggleDraftSpot(x.spot);
       }, 1000);
@@ -352,31 +371,120 @@
     return ll;
   }
 
-  // 番号を選ぶ：長押しした場所を、選んだ番号へ動かす
+  /* 並べ替え：行をつかんで上下にスライドすると、ほかの行がよけて入れ替わる（指でもマウスでも）
+     item：行のセレクタ。handle：つかむ所（null なら行のどこでも。少し動かしてから並べ替えになる）
+     lock：先頭の動かせない行の数。scroller：端まで来たら自動でスクロールする要素。onDrop(from, to) */
+  let sortDropped = 0; // 並べ替えた直後に来るクリックを無視するため
+  const justSorted = () => Date.now() - sortDropped < 450;
+  function makeSortable(list, { item, handle = null, lock = 0, scroller = null, onDrop }) {
+    let s = null, raf = 0;
+    const scrollY = () => (scroller ? scroller.scrollTop : 0);
+    const begin = () => {
+      const rects = s.items.map((x) => x.getBoundingClientRect());
+      s.tops = rects.map((r) => r.top); s.mids = rects.map((r) => r.top + r.height / 2);
+      s.on = true; s.sc0 = scrollY();
+      list.classList.add("sorting"); s.el.classList.add("sort-drag");
+      s.items.forEach((x) => { if (x !== s.el) x.classList.add("sort-shift"); });
+      try { s.grab.setPointerCapture(s.id); } catch (err) { /* そのままでも動く */ }
+      if (navigator.vibrate) { try { navigator.vibrate(8); } catch (err) { /* なくてもよい */ } }
+      const tick = () => { // 端まで来たら少しずつスクロール
+        if (!s || !s.on) return;
+        if (scroller) {
+          const r = scroller.getBoundingClientRect();
+          if (s.y < r.top + 36) scroller.scrollTop -= 7; else if (s.y > r.bottom - 36) scroller.scrollTop += 7;
+        }
+        follow();
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    };
+    const follow = () => {
+      const dy = s.y - s.y0 + (scrollY() - s.sc0), c = s.mids[s.i] + dy;
+      s.el.style.transform = `translateY(${dy}px)`;
+      let to = s.items.reduce((n, x, k) => (k !== s.i && s.mids[k] < c ? n + 1 : n), 0);
+      to = Math.max(lock, Math.min(s.items.length - 1, to));
+      s.to = to;
+      s.items.forEach((x, k) => {
+        if (k === s.i) return;
+        let t = 0;
+        if (s.i < to && k > s.i && k <= to) t = s.tops[k - 1] - s.tops[k];
+        if (to < s.i && k >= to && k < s.i) t = s.tops[k + 1] - s.tops[k];
+        x.style.transform = t ? `translateY(${t}px)` : "";
+      });
+    };
+    const finish = (drop) => {
+      if (!s) return;
+      cancelAnimationFrame(raf);
+      const { i, to, on } = s;
+      s.items.forEach((x) => { x.style.transform = ""; x.classList.remove("sort-shift", "sort-drag"); });
+      list.classList.remove("sorting");
+      s = null;
+      if (on) { sortDropped = Date.now(); if (drop && to !== i) onDrop(i, to); }
+    };
+    list.addEventListener("pointerdown", (e) => {
+      if (e.button > 0 || s) return;
+      const grab = e.target.closest(handle || item);
+      if (!grab || !list.contains(grab)) return;
+      const el = grab.closest(item), items = $$(item, list), i = items.indexOf(el);
+      if (i < lock) return;
+      s = { el, items, i, to: i, grab, id: e.pointerId, x0: e.clientX, y0: e.clientY, y: e.clientY, on: false };
+      if (handle) { e.preventDefault(); begin(); }
+    });
+    list.addEventListener("pointermove", (e) => {
+      if (!s || e.pointerId !== s.id) return;
+      s.y = e.clientY;
+      if (!s.on) {
+        if (Math.abs(e.clientX - s.x0) > 12) { s = null; return; }
+        if (Math.abs(e.clientY - s.y0) < 6) return;
+        begin();
+      }
+      follow();
+    });
+    list.addEventListener("pointerup", (e) => { if (s && e.pointerId === s.id) finish(true); });
+    list.addEventListener("pointercancel", (e) => { if (s && e.pointerId === s.id) finish(false); });
+  }
+
+  // 順番を入れ替える：行を上下にスライドして入れ替える。番号を押すと、長押しした場所をその番号にする
   function openOrderPicker(i) {
     closePicker();
-    const d = state.draft, n = d.stops.length, sch = schedule(d.start, d.stops);
-    const sp = spotById[d.stops[i].spot];
+    const d = ed(), lk = lockN(d);
+    if (i < lk || !d.stops[i]) return;
+    const focus = d.stops[i].spot; // 長押しした場所
     const box = document.createElement("div");
     box.className = "picker-back"; box.id = "picker";
-    box.innerHTML = `<div class="picker" role="dialog" aria-label="順番を選ぶ">
-        <div class="picker-head"><span class="mk-num">${i + 1}</span><div><b>${esc(sp.name)}</b><div class="small">何番目に行きますか？ 番号を選ぶと入れ替わります</div></div></div>
-        <div class="picker-list">${d.stops.map((s, k) => `<button class="picker-row ${k === i ? "on" : ""}" data-to="${k}">
-          <span class="mk-num">${k + 1}</span><span class="pr-name">${k === i ? `<b>${esc(spotById[s.spot].name)}</b>` : esc(spotById[s.spot].name)}</span>${k === i ? `<span class="pr-now">いまの順番</span>` : ""}<span class="pr-time">${R.fmt(sch[k].arrive)}</span></button>`).join("")}</div>
-        <div class="picker-foot"><button class="mini-btn danger" data-pk="del">予定から外す</button><button class="btn ghost small" data-pk="close">やめる</button></div>
-      </div>`;
     $("#app").appendChild(box);
+    const changed = () => { d.dirty = true; drawMap(false); renderSheet(); };
+    const draw = () => {
+      const sch = schedule(d.start, d.stops), fi = d.stops.findIndex((s) => s.spot === focus), sp = spotById[focus];
+      box.innerHTML = `<div class="picker" role="dialog" aria-label="順番を入れ替える">
+        <div class="picker-head"><span class="mk-num">${numOf(d, fi)}</span><div><b>${esc(sp.name)}</b><div class="small">行を上下にスライドすると入れ替わります。番号を押すと、この場所がその番号になります</div></div></div>
+        <div class="picker-list">${d.stops.map((s, k) => {
+          const name = esc(spotById[s.spot].name), warn = k >= lk && stopWarn(spotById[s.spot], sch[k]);
+          if (k < lk) return `<div class="picker-row locked"><span class="mk-num">${numOf(d, k)}</span><span class="pr-name">${name}</span><span class="pr-now">いまいる場所</span></div>`;
+          return `<button class="picker-row ${k === fi ? "on" : ""}" data-to="${k}"><span class="mk-num">${numOf(d, k)}</span><span class="pr-name">${k === fi ? `<b>${name}</b>` : name}</span><span class="pr-time ${warn ? "warn" : ""}">${R.fmt(sch[k].arrive)}着</span><span class="grip" aria-hidden="true">${ICON.grip}</span></button>`;
+        }).join("")}</div>
+        <div class="picker-foot"><button class="mini-btn danger" data-pk="del">${esc(sp.name)}を外す</button><button class="btn primary small" data-pk="close">閉じる</button></div>
+      </div>`;
+      const list = $(".picker-list", box);
+      makeSortable(list, { item: ".picker-row", lock: lk, scroller: list, onDrop: (from, to) => {
+        const [it] = d.stops.splice(from, 1); d.stops.splice(to, 0, it);
+        changed(); draw();
+        toast(`${spotById[it.spot].name}を${numOf(d, to)}番にしました`);
+      } });
+    };
+    draw();
     requestAnimationFrame(() => box.classList.add("show"));
     box.addEventListener("click", (e) => {
+      if (justSorted()) return;
       const to = e.target.closest("[data-to]"), pk = e.target.closest("[data-pk]");
       if (to) {
-        const k = Number(to.dataset.to);
+        const k = Number(to.dataset.to), fi = d.stops.findIndex((s) => s.spot === focus);
         closePicker();
-        if (k === i) return;
-        const [it] = d.stops.splice(i, 1); d.stops.splice(k, 0, it); d.dirty = true;
-        drawMap(false); renderSheet();
-        toast(`${sp.name}を${k + 1}番目にしました`);
-      } else if (pk && pk.dataset.pk === "del") { closePicker(); toggleDraftSpot(d.stops[i].spot); }
+        if (k === fi) return;
+        const [it] = d.stops.splice(fi, 1); d.stops.splice(k, 0, it);
+        changed();
+        toast(`${spotById[focus].name}を${numOf(d, k)}番にしました`);
+      } else if (pk && pk.dataset.pk === "del") { closePicker(); toggleDraftSpot(focus); }
       else if (pk || e.target === box) closePicker();
     });
   }
@@ -474,7 +582,9 @@
     $("#stage-bar").hidden = st === "explore";
     $("#chips").hidden = st === "follow";
     $("#modes").hidden = st === "follow";
-    if (st !== "explore") {
+    if (st === "redo") {
+      $("#stage-bar").innerHTML = `<div class="stage-title"><b>組み直す</b><span>行く場所を地図で選ぶ</span></div><span class="demo-badge">試作・データは仮</span>`;
+    } else if (st !== "explore") {
       $("#stage-bar").innerHTML = `<div class="seg stage-seg">${[["make", "つくる"], ["follow", "たどる"]].map(([k, l]) => `<button data-stage="${k}" class="${st === k ? "on" : ""}">${l}</button>`).join("")}</div><span class="demo-badge">試作・データは仮</span>`;
     }
   }
@@ -492,6 +602,7 @@
     if (st !== "explore") body.classList.remove("waiting", "fresh");
     if (st === "explore") renderExploreSheet();
     else if (st === "make") renderMakeSheet();
+    else if (st === "redo") renderRedoSheet();
     else renderFollowSheet();
     body.dataset.stage = st; body.scrollTop = keep;
   }
@@ -538,6 +649,58 @@
     if (d > c) return `${sp.hours.close}に閉まります。滞在を短くするか、順番を変えてください`;
     return "";
   }
+  // 予定の1か所の注意（営業時間。組み直しのときは、臨時休業・雨の日の屋外も）
+  function stopWarn(sp, a) {
+    const h = hoursWarn(sp, a.arrive, a.depart);
+    if (h) return h;
+    if (stage() === "redo") {
+      if (state.closed.includes(sp.id)) return "臨時休業です。ほかの場所にしてください";
+      if (state.rain && !sp.indoor) return "雨です。屋外の場所です";
+    }
+    return "";
+  }
+  // 予定表の行（つくる・組み直しで同じ）。≡ をつかんで上下にスライドすると入れ替わる
+  function stopItems(d, sch) {
+    const lk = lockN(d);
+    return sch.map((s, i) => {
+      const sp = spotById[s.spot];
+      const prev = i > 0 && spotById[sch[i - 1].spot];
+      const move = i > 0 ? `<div class="mk-move">${ICON.walk}<span><b>${R.fmt(sch[i - 1].depart)}〜${R.fmt(s.arrive)}</b>　${esc(prev.name)} → ${esc(sp.name)}（${moveText(s)}）${gLink(gmapLeg(prev, sp, s.mode), "行き方", "inline")}</span></div>` : "";
+      if (i < lk) { // いまいる場所（動かせない）
+        const closed = state.redo && state.redo.atClosed;
+        return `<div class="mk-stop locked">
+          <span class="mk-num now">${numOf(d, i)}</span>
+          <div class="mk-main"><div class="mk-time">${closed ? `${R.fmt(s.depart)} ここを出る` : `${R.fmt(s.arrive)}〜${R.fmt(s.depart)}`}</div><b>${esc(sp.name)}</b>
+            <div class="small">${closed ? "臨時休業だったので、ここから次へ向かいます" : "いまいる場所（動かせません）"}</div></div>
+        </div>`;
+      }
+      const warn = stopWarn(sp, s);
+      return `${move}<div class="mk-stop">
+        <button class="mk-num" data-mk="order" data-i="${i}" aria-label="順番を選ぶ">${numOf(d, i)}</button>
+        <div class="mk-main">
+          <div class="mk-time">${R.fmt(s.arrive)}〜${R.fmt(s.depart)}</div>
+          <b>${esc(sp.name)}</b>
+          <div class="small">${hoursText(sp) ? `営業 ${esc(hoursText(sp))}` : "営業時間の制約なし（仮）"}</div>
+          ${warn ? `<div class="mk-warn">${esc(warn)}</div>` : ""}
+          <div class="mk-ctrl"><span class="small">滞在</span><button data-mk="stay" data-i="${i}" data-d="-15">−15分</button><b>${s.stay}分</b><button data-mk="stay" data-i="${i}" data-d="15">＋15分</button></div>
+        </div>
+        <div class="mk-side">
+          <span class="mk-grip" aria-label="つかんで上下に動かすと順番が入れ替わります" title="つかんで上下に動かす">${ICON.grip}</span>
+          <button data-mk="del" data-i="${i}" aria-label="外す">×</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+  // 予定表の ≡ をつかんで並べ替えられるようにする
+  function sortableStops(d) {
+    const list = $("#sheet-body .mk-list");
+    if (!list) return;
+    makeSortable(list, { item: ".mk-stop", handle: ".mk-grip", lock: lockN(d), scroller: $("#sheet-body"), onDrop: (from, to) => {
+      const [it] = d.stops.splice(from, 1); d.stops.splice(to, 0, it); d.dirty = true;
+      renderSheet(); drawMap(false);
+      toast(`${spotById[it.spot].name}を${numOf(d, to)}番にしました`);
+    } });
+  }
   function renderMakeSheet() {
     const d = state.draft, sch = schedule(d.start, d.stops), n = sch.length;
     const span = n ? `${R.fmt(sch[0].arrive)}〜${R.fmt(sch[n - 1].depart)}` : "";
@@ -547,36 +710,39 @@
       return;
     }
     const chain = sch.map((s, i) => `<span class="chain-stop"><i>${i + 1}</i>${R.fmt(s.arrive)} ${esc(spotById[s.spot].name)}</span>`).join('<span class="chain-arrow">›</span>');
-    const items = sch.map((s, i) => {
-      const sp = spotById[s.spot], warn = hoursWarn(sp, s.arrive, s.depart);
-      const prev = i > 0 && spotById[sch[i - 1].spot];
-      const move = i > 0 ? `<div class="mk-move">${ICON.walk}<span><b>${R.fmt(sch[i - 1].depart)}〜${R.fmt(s.arrive)}</b>　${esc(prev.name)} → ${esc(sp.name)}（${moveText(s)}）${gLink(gmapLeg(prev, sp, s.mode), "行き方", "inline")}</span></div>` : "";
-      return `${move}<div class="mk-stop">
-        <button class="mk-num" data-mk="order" data-i="${i}" aria-label="順番を選ぶ">${i + 1}</button>
-        <div class="mk-main">
-          <div class="mk-time">${R.fmt(s.arrive)}〜${R.fmt(s.depart)}</div>
-          <b>${esc(sp.name)}</b>
-          <div class="small">${hoursText(sp) ? `営業 ${esc(hoursText(sp))}` : "営業時間の制約なし（仮）"}</div>
-          ${warn ? `<div class="mk-warn">${esc(warn)}</div>` : ""}
-          <div class="mk-ctrl"><span class="small">滞在</span><button data-mk="stay" data-i="${i}" data-d="-15">−15分</button><b>${s.stay}分</b><button data-mk="stay" data-i="${i}" data-d="15">＋15分</button></div>
-        </div>
-        <div class="mk-side">
-          <button data-mk="up" data-i="${i}" ${i === 0 ? "disabled" : ""} aria-label="前へ">↑</button>
-          <button data-mk="down" data-i="${i}" ${i === n - 1 ? "disabled" : ""} aria-label="後ろへ">↓</button>
-          <button data-mk="del" data-i="${i}" aria-label="外す">×</button>
-        </div>
-      </div>`;
-    }).join("");
     $("#sheet-body").innerHTML = `<div class="chain">${chain}</div>
-      <button class="pull-hint" data-mk="expand">引き上げると、時間を調整して名前を付けて保存できます。地図の番号は長押しで順番を選べます</button>
+      <button class="pull-hint" data-mk="expand">引き上げると、時間を調整して名前を付けて保存できます。順番は ≡ をつかんで上下にスライドするか、地図の番号を長押しして入れ替えます</button>
       <div class="mk-section">
         <div class="mk-row"><label>出発 <input type="time" class="field time-in" id="mk-start" value="${R.fmt(d.start)}" step="300"></label>${d.from ? `<span class="small">元の記事：${esc(recById[d.from].title)}</span>` : ""}</div>
-        <div class="mk-list">${items}</div>
+        <div class="mk-list">${stopItems(d, sch)}</div>
         <div class="mk-gmap">${gLink(gmapRoute(sch.map((x) => spotById[x.spot]), sch.some((x) => x.mode === "ride") ? "" : "walking"), "この順番で Google マップを開く")}</div>
         <div class="mk-save"><input class="field" id="mk-name" placeholder="予定の名前（例：大宮で建築とラーメン）" value="${esc(d.name)}" aria-label="予定の名前"><button class="btn primary" data-mk="save">${d.id ? "上書き保存" : "保存"}</button></div>
         ${d.id && !d.dirty ? `<div class="saved-note">保存しました。「たどる」から選べます<button class="link-btn" data-mk="follow">この予定をたどる${ICON.chev}</button></div>` : ""}
         <div class="mk-foot"><button class="mini-btn" data-mk="new">新しくつくる（空にする）</button></div>
       </div>`;
+    sortableStops(d);
+  }
+
+  /* 組み直し（自分で選ぶ）：いまいる場所のあとを、つくると同じように地図で選び直す */
+  function renderRedoSheet() {
+    const rd = state.redo, d = rd.d, sch = schedule(d.start, d.stops), n = sch.length - lockN(d);
+    const left = state.premium ? "無制限" : `残り${V.rebuildsLeft}回`;
+    const canAuto = state.premium || V.rebuildsLeft > 0;
+    const note = rd.auto
+      ? (state.premium ? "有料会員：組み直しは無制限" : `おまかせを使ったので、この予定にすると今月の残りは${V.rebuildsLeft - 1}回（無料は月5回）`)
+      : "自分で選ぶ組み直しは、回数に数えません";
+    const cond = [state.closed.length && "臨時休業", state.rain && "雨", state.delay && `${state.delay}分の遅れ`].filter(Boolean);
+    $("#sheet-head").innerHTML = `<b>組み直す：行く場所を選ぶ</b><small>${n ? `このあと${n}か所・〜${R.fmt(sch[sch.length - 1].depart)}` : "このあとの予定がありません"}</small>${mapCredit()}`;
+    $("#sheet-body").innerHTML = `<div class="mk-hint"><b>地図の場所を押すと、いまの場所のあとに入ります</b>もう一度押すと外れます。順番は ≡ をつかんで上下にスライドするか、地図の番号を長押しして入れ替えます。${cond.length ? `<br>いまの状況：${cond.join("・")}` : ""}</div>
+      <div class="redo-act">
+        <button class="btn accent block" data-mk="redo-apply" ${n ? "" : "disabled"}>この予定にする</button>
+        <div class="row"><button class="btn ghost small" data-mk="redo-auto" ${canAuto ? "" : "disabled"}>おまかせ（${left}）</button><button class="btn ghost small" data-mk="redo-cancel">やめる</button></div>
+        <div class="small">${note}</div>
+      </div>
+      <div class="mk-section"><div class="mk-list">${stopItems(d, sch)}</div>
+        ${n ? `<div class="mk-gmap">${gLink(gmapRoute(sch.map((x) => spotById[x.spot]), sch.some((x) => x.mode === "ride") ? "" : "walking"), "この順番で Google マップを開く")}</div>` : `<div class="empty" style="padding:14px 0">地図の場所を押して、このあと行く場所を入れてください。</div>`}
+      </div>`;
+    sortableStops(d);
   }
 
   /* たどる：保存した予定の一覧 → 選ぶと、その予定の時間割・組み直し */
@@ -608,13 +774,17 @@
       const prevSp = i > 0 && spotById[pl.stops[i - 1].spot];
       const walk = s.walk && s.arrive != null ? `<div class="tl-walk">${s.walkFrom ? esc(s.walkFrom) + "から" : ""}${moveText(s)}${prevSp ? gLink(gmapLeg(prevSp, sp, s.mode), "行き方", "inline") : ""}</div>` : "";
       const from = s.replacedFrom ? `<div class="small">${esc(spotById[s.replacedFrom].name)}の代わり</div>` : "";
+      // カードを押すと「いまここにいる」にできる（中止した場所は選べない）
+      const here = s.status === "dropped" ? "" : i === pl.cur ? '<span class="tl-here on">いまここ</span>' : '<span class="tl-here">ここにいる ›</span>';
       return `${i > 0 ? `<div class="tl-item"><div></div><div class="tl-line"></div><div>${walk}</div></div>` : ""}
         <div class="tl-item"><div class="tl-time">${s.arrive != null ? R.fmt(s.arrive) : "—"}</div><div class="tl-line"><span class="tl-dot ${st}"></span></div>
-        <div class="tl-card ${st} ${s.status === "replaced" ? "replaced" : ""} ${s.status === "dropped" ? "dropped" : ""}">
-          <b>${i + 1}　${esc(sp.name)}</b>${ch}${closedNow}
+        <div class="tl-card ${st} ${s.status === "replaced" ? "replaced" : ""} ${s.status === "dropped" ? "dropped" : ""}" ${s.status === "dropped" ? "" : `data-fl="here" data-i="${i}" role="button" tabindex="0"`}>
+          <div class="tl-head"><b>${i + 1}　${esc(sp.name)}</b>${here}</div>${ch}${closedNow}
           <div class="small">${ioText(sp)}・${s.stay}分${sp.hours ? `・${sp.hours.open}〜${sp.hours.close}` : ""}</div>${from}
         </div></div>`;
     }).join("");
+    // いまいる場所を番号で選ぶ
+    const where = pl.stops.map((s, i) => `<button class="${i === pl.cur ? "on" : i < pl.cur ? "done" : ""}" data-fl="here" data-i="${i}" ${s.status === "dropped" ? "disabled" : ""} aria-label="${i + 1} ${esc(spotById[s.spot].name)}にいる">${i + 1}</button>`).join("");
     const alert = [];
     if (state.closed.includes(cur.spot)) alert.push(`<b>${esc(curSpot.name)}が臨時休業でした</b>同じ系統で、歩いて行ける店を探せます。`);
     if (state.rain && !state.rainHandled) alert.push(`<b>雨が降り出しました</b>屋外の予定を、屋内の場所に替えられます。`);
@@ -624,9 +794,11 @@
     $("#sheet-head").innerHTML = `<b>${esc(pl.title)}</b><small>たどっています</small>${mapCredit()}`;
     $("#sheet-body").innerHTML = `<button class="link-btn back-list" data-fl="list">‹ ほかの予定を選ぶ</button>
       ${alert.map((a) => `<div class="alert">${a}</div>`).join("")}
+      <div class="fl-where"><span>いまいる場所</span><div class="fl-where-row">${where}</div></div>
       <div class="fl-now">いま：<b>${pl.cur + 1}　${esc(curSpot.name)}</b>（${cur.arrive != null ? `${R.fmt(cur.arrive)}〜${R.fmt(cur.depart)}` : "—"}）${next ? `<br>つぎ：${pl.stops.indexOf(next) + 1}　${esc(spotById[next.spot].name)}（${R.fmt(next.arrive)}・${moveText(next)}）<div>${gLink(gmapLeg(curSpot, spotById[next.spot], next.mode), "つぎへの行き方を Google マップで見る")}</div>` : "<br>この場所で最後です"}</div>
-      ${canRebuild ? `<button class="btn accent block" data-act="rebuild">組み直す（${left}）</button>` : `<button class="btn primary block" data-act="premium">有料会員で無制限に（初月無料）</button>`}
-      <div class="small" style="text-align:center;margin:6px 0 4px">無料でも条件はすべて使えます。有料会員は回数無制限と通知つき。</div>
+      ${canRebuild ? `<button class="btn accent block" data-act="rebuild">おまかせで組み直す（${left}）</button>` : `<button class="btn primary block" data-act="premium">有料会員で無制限に（初月無料）</button>`}
+      <button class="btn ghost block redo-btn" data-fl="redo">${ICON.pin}行く場所を自分で選んで組み直す</button>
+      <div class="small" style="text-align:center;margin:6px 0 4px">おまかせは無料で月5回（条件はすべて使えます）。有料会員は回数無制限と通知つき。自分で選ぶのはいつでも無料。</div>
       <div class="demo-panel"><div class="small"><b>デモ操作</b>（本番では位置情報と天気で自動）</div>
         <div class="row">
           <button class="toggle" data-act="d-next">次の場所へ進む</button>
@@ -711,7 +883,7 @@
     // 中身（指だけ）。スクロールとシートの移動を、動かし始めの向きで決める
     let tb = null;
     body.addEventListener("touchstart", (e) => {
-      if (e.touches.length !== 1 || e.target.closest("input,textarea,select")) { tb = null; return; }
+      if (e.touches.length !== 1 || e.target.closest("input,textarea,select,.mk-grip")) { tb = null; return; } // ≡ は並べ替えに使う
       tb = { y: e.touches[0].clientY, mode: null };
     }, { passive: true });
     body.addEventListener("touchmove", (e) => {
@@ -732,9 +904,10 @@
 
   /* ---------- つくる ---------- */
   function toggleDraftSpot(spotId) {
-    const d = state.draft, i = d.stops.findIndex((s) => s.spot === spotId), sp = spotById[spotId];
+    const d = ed(), i = d.stops.findIndex((s) => s.spot === spotId), sp = spotById[spotId];
+    if (i >= 0 && i < lockN(d)) { toast("いまいる場所は外せません"); return; }
     if (i >= 0) { d.stops.splice(i, 1); toast(`${sp.name}を予定から外しました`); }
-    else { d.stops.push({ spot: spotId, stay: defaultStay(sp) }); toast(`${d.stops.length}　${sp.name}を予定に入れました`); }
+    else { d.stops.push({ spot: spotId, stay: defaultStay(sp) }); toast(`${numOf(d, d.stops.length - 1)}　${sp.name}を予定に入れました`); }
     d.dirty = true;
     drawMap(false); renderSheet();
   }
@@ -742,9 +915,10 @@
   function useRecord(recId, how) {
     const r = recById[recId], w = writerById[r.writer];
     const add = r.spots.map((s) => ({ spot: s.spot, stay: s.stay || defaultStay(spotById[s.spot]) }));
-    const d = state.draft;
+    const d = ed();
     if (how === "append") {
       const have = new Set(d.stops.map((s) => s.spot));
+      if (stage() === "redo") state.redo.done.forEach((id) => have.add(id));
       const fresh = add.filter((a) => !have.has(a.spot));
       if (!fresh.length) { toast("もう予定に入っています"); return; }
       d.stops.push(...fresh); d.dirty = true;
@@ -754,7 +928,8 @@
       state.draft = newDraft({ name: r.type === "route" ? r.title : "", start: R.toMin(r.start || "10:00"), stops: add, from: r.id });
       toast(`${w.name}さんの${r.type === "route" ? "ルート" : "場所"}を入れました`);
     }
-    state.planMode = "make"; state.fitNext = true;
+    if (!(how === "append" && stage() === "redo")) state.planMode = "make";
+    state.fitNext = true;
     switchView("plan");
   }
   function saveDraft() {
@@ -775,7 +950,11 @@
     renderSheet();
   }
   function onMake(t) {
-    const d = state.draft, mk = t.dataset.mk, i = Number(t.dataset.i);
+    const d = ed(), mk = t.dataset.mk, i = Number(t.dataset.i);
+    if (mk === "redo-apply") return applyRedo();
+    if (mk === "redo-cancel") return closeRedo("組み直しをやめました");
+    if (mk === "redo-auto") return autoRedo();
+    if (i < lockN(d)) return; // いまいる場所は動かせない
     if (mk === "save") return saveDraft();
     if (mk === "expand") return setSheet("full");
     if (mk === "order") return openOrderPicker(i);
@@ -818,6 +997,8 @@
     if (fl === "pick") startFollow(id);
     if (fl === "edit") editPlan(id);
     if (fl === "make") openPlan("make");
+    if (fl === "here") setHere(Number(t.dataset.i));
+    if (fl === "redo") openRedo(null);
     if (fl === "list") { state.followList = true; renderSheet(); drawMap(true); }
     if (fl === "del") {
       const p = state.plans.find((x) => x.id === id);
@@ -843,6 +1024,85 @@
     if (act === "rebuild") return doRebuild();
     if (act === "premium") { state.premium = true; toast("デモ：有料会員（初月無料）になりました"); }
     renderSheet();
+  }
+  // いまいる場所を選ぶ（番号のボタン、または時間割のカードを押す）
+  function setHere(i) {
+    const pl = state.plan;
+    if (!pl || !pl.stops[i] || pl.stops[i].status === "dropped") return;
+    if (i === pl.cur) { toast("いまいる場所です"); return; }
+    pl.cur = i;
+    renderSheet(); drawMap(false);
+    toast(`いまいる場所を「${i + 1} ${spotById[pl.stops[i].spot].name}」にしました`);
+  }
+
+  /* 組み直し（自分で選ぶ）：いまいる場所のあとを、つくると同じ地図で選び直す
+     prefill：おまかせの結果から始めるときは { stops, fromIndex }。null なら、いまの予定の残りから始める */
+  function openRedo(prefill) {
+    const pl = state.plan;
+    if (!pl) return;
+    const cur = pl.stops[pl.cur], atClosed = state.closed.includes(cur.spot);
+    const arrive = cur.arrive != null ? cur.arrive : 600;
+    const stay = cur.depart != null && cur.arrive != null ? cur.depart - cur.arrive : cur.stay;
+    // いまいる場所を先頭に固定する（臨時休業なら、そこから出るだけ）
+    const here = { spot: cur.spot, stay: atClosed ? 0 : stay };
+    const picked = (prefill ? prefill.stops.slice(prefill.fromIndex) : pl.stops.slice(pl.cur + 1))
+      .filter((s) => s.status !== "dropped" && s.spot !== cur.spot);
+    const rest = picked.map((s) => ({ spot: s.spot, stay: s.stay }));
+    // おまかせの結果は「開くまで待つ」時間を含む。待つ分は、ひとつ前の場所に長くいることにする
+    if (prefill) {
+      let prevDepart = arrive + (state.delay || 0) + here.stay;
+      picked.forEach((s, k) => {
+        const gap = s.arrive != null ? s.arrive - s.walk - prevDepart : 0;
+        if (gap > 0) (k === 0 ? here : rest[k - 1]).stay += gap;
+        if (s.depart != null) prevDepart = s.depart;
+      });
+    }
+    state.redo = {
+      d: { start: arrive + (state.delay || 0), stops: [here, ...rest], lockN: 1, base: pl.cur, dirty: false },
+      done: pl.stops.slice(0, pl.cur).filter((s) => s.status !== "dropped").map((s) => s.spot),
+      atClosed, closedName: atClosed ? spotById[cur.spot].name : null, auto: !!prefill,
+    };
+    state.planMode = "redo"; state.fitNext = true; state.sheetBy.redo = "half";
+    switchView("plan");
+    if (!prefill) toast("地図の場所を押して、このあと行く場所を選んでください");
+  }
+  // おまかせ：いま選んでいる場所を、趣味の合う人の記録で直した結果を入れる（臨時休業・雨・営業時間）
+  function autoRedo() {
+    if (!state.premium && V.rebuildsLeft <= 0) { toast("今月のおまかせは使い切りました"); return; }
+    const pl = state.plan, sch = schedule(state.redo.d.start, state.redo.d.stops);
+    const pd = rebuildResult([...pl.stops.slice(0, pl.cur + 1), ...sch.slice(1)]);
+    if (!pd) return;
+    openRedo({ stops: pd.result, fromIndex: pd.fromIndex });
+    toast("趣味の合う人の記録で並べ直しました。ここからさらに直せます");
+  }
+  function closeRedo(msg) {
+    state.redo = null; state.planMode = "follow"; state.followList = false;
+    switchView("plan");
+    if (msg) toast(msg);
+  }
+  // 選んだ予定にする：いまいる場所までは残し、そのあとを入れ替える
+  function applyRedo() {
+    const pl = state.plan, rd = state.redo;
+    if (!pl || !rd) return;
+    const d = rd.d, sch = schedule(d.start, d.stops);
+    if (sch.length < 2) { toast("このあと行く場所を入れてください"); return; }
+    const before = {};
+    pl.stops.slice(pl.cur + 1).forEach((s) => { if (s.status !== "dropped" && s.arrive != null) before[s.spot] = s.arrive; });
+    const stops = pl.stops.slice(0, pl.cur).map((s) => ({ ...s }));
+    const cur = pl.stops[pl.cur];
+    if (rd.atClosed) stops.push({ ...cur, status: "dropped", reason: "臨時休業", arrive: null, depart: null });
+    else stops.push({ ...cur, arrive: sch[0].arrive, depart: sch[0].depart, status: sch[0].arrive !== cur.arrive ? "shifted" : cur.status });
+    sch.slice(1).forEach((s, k) => {
+      const was = before[s.spot];
+      const status = was == null ? "replaced" : Math.abs(was - s.arrive) >= 5 ? "shifted" : "planned";
+      stops.push({ ...s, status, walkFrom: k === 0 && rd.atClosed ? rd.closedName : null, before: was != null ? { arrive: was } : null });
+    });
+    pl.stops = stops;
+    if (rd.atClosed) pl.cur = Math.min(pl.cur + 1, stops.length - 1);
+    if (rd.auto && !state.premium) V.rebuildsLeft = Math.max(0, V.rebuildsLeft - 1);
+    if (state.rain) state.rainHandled = true;
+    state.delay = 0; state.pending = null;
+    closeRedo("新しい予定にしました");
   }
 
   /* ---------- 重なる画面（記事・書き手・組み直し） ---------- */
@@ -918,10 +1178,12 @@
           <button class="btn primary small" id="join-btn">メンバーになって読む（月${w.membership.price}円）</button></div>`) : "";
     // つくるの途中で開いたときは「足す」、それ以外は書いた人のルートで「つくる」
     const n = r.spots.length;
-    const appending = state.view === "plan" && state.planMode === "make" && state.draft.stops.length > 0;
-    const fresh = appending ? r.spots.filter((s) => !state.draft.stops.some((x) => x.spot === s.spot)).length : n;
+    const redoing = stage() === "redo";
+    const appending = editing() && (redoing || state.draft.stops.length > 0);
+    const have = appending ? new Set([...ed().stops.map((x) => x.spot), ...(redoing ? state.redo.done : [])]) : new Set();
+    const fresh = appending ? r.spots.filter((s) => !have.has(s.spot)).length : n;
     const ctaLabel = appending ? (!fresh ? "この記事の場所は、もう予定に入っています" : n > 1 ? `このルートを予定の後ろに足す（${fresh}か所）` : "この場所を予定に足す") : (n > 1 ? "このルートで予定をつくる（無料）" : "この場所から予定をつくる");
-    const cta = `<div class="sticky-cta"><button class="btn accent block" id="make-btn" ${appending && !fresh ? "disabled" : ""}>${ICON.calplus}${ctaLabel}</button>${appending ? `<div class="small" style="text-align:center;margin-top:6px">つくっている予定（${state.draft.stops.length}か所）の後ろに足します</div>` : ""}</div>`;
+    const cta = `<div class="sticky-cta"><button class="btn accent block" id="make-btn" ${appending && !fresh ? "disabled" : ""}>${ICON.calplus}${ctaLabel}</button>${appending ? `<div class="small" style="text-align:center;margin-top:6px">${redoing ? "組み直している予定" : `つくっている予定（${state.draft.stops.length}か所）`}の後ろに足します</div>` : ""}</div>`;
     p.innerHTML = bar(w.official ? "公式の特集" : "記事") + `<div class="pad">
       <div class="writer-row"><button data-writer="${w.id}" style="display:flex;align-items:center;gap:10px">${avatar(w)}<span class="name">${esc(w.name)}</span></button>${badges(w, r)}<span style="margin-left:auto">${favBtn}</span></div>
       <div class="h1">${esc(r.title)}</div>
@@ -1000,22 +1262,27 @@
   }
 
   /* ---------- 組み直し ---------- */
-  function doRebuild() {
+  // おまかせの計算。stops：組み直す前の予定（たどっている予定、または自分で選んでいる途中の予定）
+  function rebuildResult(stops) {
     const pl = state.plan, cur = pl.stops[pl.cur];
     const atClosed = state.closed.includes(cur.spot);
     const fromIndex = atClosed ? pl.cur : pl.cur + 1;
-    if (fromIndex >= pl.stops.length) { toast("組み直す予定が残っていません"); return; }
+    if (fromIndex >= stops.length) { toast("組み直す予定が残っていません"); return null; }
     const nowMin = atClosed ? cur.arrive : cur.depart;
     const opts = { fromIndex, nowMin, position: cur.spot, closedIds: state.closed, rain: state.rain, delayMin: state.delay, maxWalk: 30, prefer: {} };
-    const result = R.rebuild(D, pl.stops, opts);
-    state.pending = { result, fromIndex, atClosed, opts, closedName: atClosed ? spotById[cur.spot].name : null };
+    return { result: R.rebuild(D, stops, opts), base: stops, fromIndex, atClosed, opts, closedName: atClosed ? spotById[cur.spot].name : null };
+  }
+  function doRebuild() {
+    const pd = rebuildResult(state.plan.stops);
+    if (!pd) return;
+    state.pending = pd;
     showPanel(renderRebuild);
   }
 
   function chooseAlt(fromSpot, altId) {
     const pd = state.pending;
     pd.opts.prefer[fromSpot] = altId;
-    pd.result = R.rebuild(D, state.plan.stops, pd.opts);
+    pd.result = R.rebuild(D, pd.base, pd.opts);
     paint();
     toast("候補を入れ替えました");
   }
@@ -1046,9 +1313,11 @@
       ${blocks}
       <div class="small" style="margin:8px 0 16px">${left}</div>
       <button class="btn accent block" id="apply-btn">この予定にする</button>
+      <button class="btn ghost block redo-btn" id="redo-map-btn" style="margin-top:8px">${ICON.pin}地図で行く場所を自分で直す</button>
       <button class="btn ghost block back" style="margin-top:8px">やめる</button>
     </div>`;
     $$("[data-alt]", p).forEach((b) => b.addEventListener("click", () => chooseAlt(b.dataset.from, b.dataset.alt)));
+    $("#redo-map-btn", p).addEventListener("click", () => { const pd = state.pending; openRedo({ stops: pd.result, fromIndex: pd.fromIndex }); });
     $("#apply-btn", p).addEventListener("click", () => {
       const pl = state.plan, pd = state.pending;
       pl.stops = pd.result.map((s, i) => {
@@ -1432,6 +1701,7 @@
     }, 30);
   }
   function openPlan(mode) {
+    if (mode !== "redo" && state.redo) state.redo = null; // 組み直しの途中でほかへ行ったら、組み直しはやめる
     state.planMode = mode;
     if (mode === "follow") state.followList = true; // たどるを押したら、まず保存した予定を選ぶ
     // マウスで選んだあとも、ポインタが離れるまでメニューが出たままにならないようにする
@@ -1455,7 +1725,11 @@
 
     // 下のシート（探す・つくる・たどる）
     const sb = $("#sheet-body");
+    sb.addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === " ") && e.target.matches(".tl-card[data-fl]")) { e.preventDefault(); onFollow(e.target); }
+    });
     sb.addEventListener("click", (e) => {
+      if (justSorted()) return; // 並べ替えた直後のクリックは無視
       const t = e.target.closest("[data-mk],[data-fl],[data-act],[data-rec]");
       if (!t) return;
       if (t.dataset.mk) onMake(t);
