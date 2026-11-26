@@ -58,6 +58,11 @@
     gps: ic('<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22"/>'),
     ext: ic('<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/>'),
     back: ic('<path d="M15 5l-7 7 7 7"/>'),
+    heart: ic('<path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0112 7.3a4.3 4.3 0 017.5 2.5C19.5 15.4 12 20 12 20z"/>'),
+    home: ic('<path d="M4 11l8-6.5 8 6.5"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/>'),
+    tree: ic('<path d="M12 3l5.5 8h-3l4 6h-13l4-6h-3z"/><path d="M12 17v4"/>'),
+    yen: ic('<path d="M7 4l5 7.5L17 4M12 11.5V20M8 13h8M8 16.5h8"/>'),
+    sun: ic('<path d="M3 18h18M7.5 18a4.5 4.5 0 019 0"/><path d="M12 8.5V10.5M5.6 11.6l1.4 1.4M18.4 11.6L17 13M3.5 15h2M18.5 15h2"/>'),
   };
   const VIS = [["public", "公開"], ["member", "メンバー限定"], ["private", "非公開"]];
   const visLabel = (k) => (VIS.find((v) => v[0] === k) || VIS[0])[1];
@@ -149,7 +154,7 @@
   const ioText = (sp) => sp.io || (sp.indoor ? "屋内" : "屋外");
   const hoursText = (sp) => sp.hoursText || (sp.hours ? `${sp.hours.open}〜${sp.hours.close}${sp.addr ? "" : "（仮）"}` : "");
   // 移動：歩き（2kmまで）か、電車・バスなど
-  const moveText = (s) => (s.mode === "ride" ? `電車・バスなどで約${s.walk}分` : `歩いて${s.walk}分`);
+  const moveText = (s) => (s.mode === "ride" ? `約${s.walk}分` : `${s.walk}分`); // 横に移動手段の札（modeTag）を出す
 
   /* Google マップ（APIキーなしで開ける URL） */
   const llq = (sp) => `${sp.lat},${sp.lng}`;
@@ -188,7 +193,9 @@
     }));
     return best;
   }
-  const schedule = (start, stops) => (stops.length ? R.buildSchedule(D, { start: R.fmt(start), spots: stops }) : []);
+  // おまかせで選んだ場所は、選んだ理由（pickWhy）と、何の代わりか（replacedFrom）を時刻を計算し直しても残す
+  const schedule = (start, stops) => (stops.length ? R.buildSchedule(D, { start: R.fmt(start), spots: stops })
+    .map((s, i) => (stops[i].pickWhy ? { ...s, pickWhy: stops[i].pickWhy, replacedFrom: stops[i].replacedFrom || null } : s)) : []);
 
   /* ---------- 地図（探す・つくる・たどる で同じ地図を使う） ---------- */
   let map, layer, bubbleLayer, pinInfo = [];
@@ -723,10 +730,45 @@
       if (state.closed.includes(sp.id)) return "臨時休業です。ほかの場所にしてください";
       if (state.rain && !sp.indoor) return "雨です。屋外の場所です";
     }
-    return "";
+    return sunsetWarn(sp, a); // 自然・景色の場所に、日の入りより後に着くとき
   }
   const stayText = (m) => (m >= 60 ? `${Math.floor(m / 60)}時間${m % 60 ? (m % 60) + "分" : ""}` : `${m}分`);
   const moveIcon = (s) => (s.mode === "ride" ? IC.train : IC.walk);
+  // 移動の分数の横に出す、小さな移動手段の札（歩き／電車＋歩き）
+  const modeName = (s) => (s.mode === "ride" ? "電車＋歩き" : "歩き");
+  const modeTag = (s) => `<small class="mv-mode ${s.mode === "ride" ? "ride" : ""}">${modeName(s)}</small>`;
+  // おまかせで選んだ理由（誰の「また行きたい」か・屋内／屋外・歩く分数）を小さな札で
+  function whyChips(pw) {
+    if (!pw) return "";
+    const c = [];
+    if (pw.who) c.push(`<span class="why-chip like">${IC.heart}${esc(pw.who)}さんが「${esc(pw.liked)}」</span>`);
+    else if (pw.group) c.push(`<span class="why-chip like">${IC.heart}${esc(pw.group.tag)}好き${pw.group.n}人が「また行きたい」</span>`);
+    if (pw.style) c.push(`<span class="why-chip">同じ${esc(pw.style)}系</span>`);
+    c.push(`<span class="why-chip">${pw.io === "屋外" ? IC.tree : IC.home}${esc(pw.io)}</span>`);
+    c.push(`<span class="why-chip">${IC.walk}歩いて${pw.walk}分</span>`);
+    return `<div class="why-box"><small>${IC.spark}おまかせで選んだ理由</small><div class="why-chips">${c.join("")}</div></div>`;
+  }
+  // 自然・景色を見に行く場所（日の入りのあとに着くと、景色が見えにくい）
+  const isScenic = (sp) => sp.tags.includes("自然") || (!sp.indoor && ["公園", "海", "山", "名所"].includes(sp.kind));
+  const sunsetOf = (sp) => R.sunsetMin(sp.lat, sp.lng, new Date());
+  function sunsetWarn(sp, a) {
+    if (!isScenic(sp) || a.arrive == null) return "";
+    const ss = sunsetOf(sp);
+    return ss != null && a.arrive >= ss ? `日の入り（${R.fmt(ss)}ごろ）より後に着きます。景色が見えにくい時間です` : "";
+  }
+  // 予算の目安：記事の値段（場所ごとの目安の金額）を足して、100円単位にまるめる。交通費は入れない
+  function budgetOf(stops) {
+    let sum = 0, none = 0;
+    stops.forEach((s) => { const p = spotById[s.spot].price; if (p == null) none++; else sum += p; });
+    return { yen: Math.round(sum / 100) * 100, none, n: stops.length };
+  }
+  const budgetText = (b) => (b.yen ? `予算の目安 約${b.yen.toLocaleString()}円` : "予算の目安 0円（無料の場所だけ）");
+  // 保存の下に出す予算の目安。電車などに乗るときは、交通費が別にかかることも書く
+  function budgetLine(b, sch) {
+    const ride = sch.some((s) => s.mode === "ride");
+    const note = `記事の値段（入場・食事など）の合計${b.none ? `。${b.none}か所は値段の記録なし` : ""}${ride ? "。電車などの運賃は別" : ""}`;
+    return `<div class="mk-budget">${IC.yen}<span><b>${budgetText(b)}</b><small>${note}</small></span></div>`;
+  }
   // Google マップを開く小さなボタン（アイコン＋短い言葉）
   const gIcon = (href, label) => `<a class="g-ic" href="${href}" target="_blank" rel="noopener" title="Google マップで${esc(label)}を見る">${IC.pin}<span>${esc(label)}</span></a>`;
   // 予定表の行（つくる・組み直しで同じ）。≡ をつかんで上下にスライドすると入れ替わる。文字は減らしてアイコンで見せる
@@ -737,7 +779,7 @@
     const rows = sch.map((s, i) => {
       const sp = spotById[s.spot];
       const prev = i > 0 && spotById[sch[i - 1].spot];
-      const move = i > 0 ? `<div class="mk-move">${moveIcon(s)}<b>${s.walk}分</b><span>${R.fmt(sch[i - 1].depart)} → ${R.fmt(s.arrive)}</span>${gIcon(gmapLeg(prev, sp, s.mode), "経路")}</div>` : "";
+      const move = i > 0 ? `<div class="mk-move">${moveIcon(s)}<b>${s.walk}分</b>${modeTag(s)}<span>${R.fmt(sch[i - 1].depart)} → ${R.fmt(s.arrive)}</span>${gIcon(gmapLeg(prev, sp, s.mode), "経路")}</div>` : "";
       if (i < lk) { // いまいる場所・出てきた場所（動かせない）
         const left = rd && rd.kind !== "at", closed = rd && rd.kind === "at" && rd.closed;
         const sub = left ? `${IC.walk}${R.fmt(s.arrive)}に出た・ここから向かっています` : closed ? `${IC.closed}臨時休業でスキップ・ここから次へ` : `${IC.gps}${R.fmt(s.arrive)}–${R.fmt(s.depart)}・いまいる場所`;
@@ -751,7 +793,8 @@
           <b class="mk-name">${esc(sp.name)}</b>
           <div class="mk-line"><span class="mk-time">${R.fmt(s.arrive)}–${R.fmt(s.depart)}</span>
             <span class="mk-stay" title="滞在する時間">${IC.clock}<button data-mk="stay" data-i="${i}" data-d="-15" aria-label="15分短く">−</button><b>${stayText(s.stay)}</b><button data-mk="stay" data-i="${i}" data-d="15" aria-label="15分長く">＋</button></span></div>
-          ${warn ? `<div class="mk-warn">${IC.warn}<span>${esc(warn)}</span></div>` : ""}
+          ${warn ? `<div class="mk-warn ${warn.startsWith("日の入り") ? "sunset" : ""}">${warn.startsWith("日の入り") ? IC.sun : IC.warn}<span>${esc(warn)}</span></div>` : ""}
+          ${rd && s.pickWhy ? whyChips(s.pickWhy) : ""}
         </div>
         <div class="mk-side">
           <span class="mk-grip" aria-label="つかんで上下に動かすと順番が入れ替わります" title="つかんで上下に動かす">${ICON.grip}</span>
@@ -797,6 +840,7 @@
       <div class="mk-tip">${ICON.grip}をつかむか、地図の番号を長押しで並べ替え</div>
       ${d.from ? `<div class="mk-tip">元の記事：${esc(recById[d.from].title)}</div>` : ""}
       <div class="mk-save"><input class="field" id="mk-name" placeholder="予定の名前" value="${esc(d.name)}" aria-label="予定の名前"><button class="btn primary" data-mk="save">${IC.save}${d.id ? "上書き" : "保存"}</button></div>
+      ${budgetLine(budgetOf(d.stops), sch)}
       ${d.id && !d.dirty ? `<div class="saved-note">${IC.check}<span>保存しました</span><button class="link-btn" data-mk="follow">${IC.route}この予定をたどる</button></div>` : ""}`;
     sortableStops(d);
   }
@@ -836,7 +880,7 @@
         const sch = schedule(p.start, p.stops), on = state.plan && state.plan.planId === p.id;
         return `<div class="plan-card ${on ? "on" : ""}" data-fl="pick" data-id="${p.id}">
           <div class="row-between"><b class="pn">${esc(p.name)}</b>${on ? '<span class="badge fav">たどっている途中</span>' : ""}</div>
-          <div class="meta"><span>${IC.pin}${p.stops.length}か所</span><span>${IC.clock}${R.fmt(sch[0].arrive)}–${R.fmt(sch[sch.length - 1].depart)}</span></div>
+          <div class="meta"><span>${IC.pin}${p.stops.length}か所</span><span>${IC.clock}${R.fmt(sch[0].arrive)}–${R.fmt(sch[sch.length - 1].depart)}</span><span title="記事の値段の合計（交通費は別）">${IC.yen}${budgetText(p.budget || budgetOf(p.stops)).replace("予算の目安 ", "")}</span></div>
           <div class="small chain-text">${p.stops.map((s, i) => `${i + 1} ${esc(spotById[s.spot].name)}`).join(" › ")}</div>
           <div class="row"><button class="btn small accent" data-fl="pick" data-id="${p.id}">${IC.route}${on ? "続きから" : "たどる"}</button><button class="mini-btn" data-fl="edit" data-id="${p.id}" title="つくるで直す">${IC.edit}直す</button><button class="mini-btn danger only-ic" data-fl="del" data-id="${p.id}" aria-label="消す" title="消す">${IC.trash}</button></div>
         </div>`;
@@ -848,7 +892,7 @@
     // いまの状態：いる（ついた）／移動中（でた〜次の ついた）／全部まわった
     let status;
     if (ph === "at") status = `<div class="fl-status at">${IC.gps}<span><small>いまここ</small><b><i>${pl.cur + 1}</i>${esc(curSp.name)}</b></span><em>〜${R.fmt(cur.depart)}</em></div>`;
-    else if (ph === "go") status = `<div class="fl-status go">${moveIcon(cur)}<span><small>移動中${fromSp ? `・${esc(fromSp.name)}から` : ""}</small><b><i>${pl.cur + 1}</i>${esc(curSp.name)}</b></span><em>${R.fmt(cur.arrive)}着</em>${gIcon(fromSp ? gmapLeg(fromSp, curSp, cur.mode) : gmapPlace(curSp), "経路")}</div>`;
+    else if (ph === "go") status = `<div class="fl-status go">${moveIcon(cur)}<span><small>移動中${fromSp ? `（${modeName(cur)}）・${esc(fromSp.name)}から` : ""}</small><b><i>${pl.cur + 1}</i>${esc(curSp.name)}</b></span><em>${R.fmt(cur.arrive)}着</em>${gIcon(fromSp ? gmapLeg(fromSp, curSp, cur.mode) : gmapPlace(curSp), "経路")}</div>`;
     else status = `<div class="fl-status end">${IC.flag}<span><small>おつかれさまでした</small><b>予定の場所をすべてまわりました</b></span><button class="btn small primary" data-act="write">${IC.edit}記事を書く</button></div>`;
     // 起きたこと（アイコンで押したもの）。移動中なら、次に行く場所のこととして出す
     const alerts = [];
@@ -871,7 +915,7 @@
         const a = moving ? fromSp : spotById[pl.stops[i - 1].spot];
         const fromName = moving ? fromSp.name : s.walkFrom;
         leg = `<div class="tl-item tl-leg ${moving ? "moving" : st === "done" || st === "at" ? "past" : ""}"><div class="tl-time"></div><div class="tl-line"></div>
-          <div class="tl-walk">${moveIcon(s)}${moving ? "<b>移動中</b>" : ""}<span>${s.walk}分${fromName ? `・${esc(fromName)}から` : ""}</span>${gIcon(gmapLeg(a, sp, s.mode), "経路")}</div></div>`;
+          <div class="tl-walk">${moveIcon(s)}${moving ? "<b>移動中</b>" : ""}<b class="tl-min">${s.walk}分</b>${modeTag(s)}${fromName ? `<span>${esc(fromName)}から</span>` : ""}${gIcon(gmapLeg(a, sp, s.mode), "経路")}</div></div>`;
       }
       const ch = { replaced: "組み直し", shifted: "時間がずれた", shortened: "短く" }[s.status];
       const badge = { at: '<span class="tl-badge at">いまここ</span>', go: '<span class="tl-badge go">ここに行く</span>', skip: `<span class="tl-badge skip">スキップ${s.reason ? "・" + esc(s.reason) : ""}</span>` }[st] || "";
@@ -888,6 +932,7 @@
           <div class="tl-head"><b><i class="tl-no">${i + 1}</i><span>${esc(sp.name)}</span></b>${badge}</div>
           <div class="tl-sub">${ioText(sp)}・${stayText(s.stay)}${ch ? `<span class="change ${s.status}">${ch}</span>` : ""}${flags}</div>
           ${s.replacedFrom ? `<div class="tl-sub">${esc(spotById[s.replacedFrom].name)}の代わり</div>` : ""}
+          ${s.pickWhy && st !== "skip" ? whyChips(s.pickWhy) : ""}
           ${ad}
         </div></div>`;
     }).join("");
@@ -929,12 +974,17 @@
     const order = ["peek", "half", "full"];
     const cur = () => order.find((s) => el.classList.contains(s));
     let drag = null, raf = 0;
+    // 引っぱっている間は、ページのどこの文字も選択されないようにする（マウスで引っぱったとき、通った所が選択されてしまうため）
+    const noSelect = (on) => {
+      document.documentElement.classList.toggle("sheet-dragging", on);
+      if (on) { const s = window.getSelection && window.getSelection(); if (s && s.rangeCount) s.removeAllRanges(); }
+    };
     const begin = (y) => { drag = { y0: y, h0: el.getBoundingClientRect().height, y: y, t: performance.now(), v: 0, moved: false }; };
     const follow = (y) => {
       if (!drag) return false;
       if (!drag.moved) {
         if (Math.abs(y - drag.y0) < 6) return false;
-        drag.moved = true; drag.y0 = y; el.classList.add("dragging");
+        drag.moved = true; drag.y0 = y; el.classList.add("dragging"); noSelect(true);
       }
       const now = performance.now(), dt = Math.max(1, now - drag.t);
       drag.v = 0.7 * ((drag.y - y) / dt) + 0.3 * drag.v; // 上向きが正（px/ms）
@@ -952,6 +1002,7 @@
       if (!drag) return null;
       const d = drag; drag = null;
       if (!d.moved) return "tap";
+      noSelect(false);
       cancelAnimationFrame(raf);
       const s = snaps(), h = d.h != null ? d.h : el.getBoundingClientRect().height; // 画面に出る前の最後の位置も使う
       if (performance.now() - d.t > 120) d.v = 0; // 止めてから離したときは勢いなし
@@ -965,7 +1016,11 @@
 
     // つまみ・見出し（マウスでも指でも）
     [handle, head].forEach((zone) => {
-      zone.addEventListener("pointerdown", (e) => { if (e.button > 0 || e.target.closest("a,button,input")) return; begin(e.clientY); zone._pid = e.pointerId; });
+      zone.addEventListener("pointerdown", (e) => {
+        if (e.button > 0 || e.target.closest("a,button,input")) return;
+        if (e.pointerType === "mouse") e.preventDefault(); // マウスで押したところから文字の選択が始まらないように
+        begin(e.clientY); zone._pid = e.pointerId;
+      });
       zone.addEventListener("pointermove", (e) => {
         if (!drag || zone._pid !== e.pointerId) return;
         if (follow(e.clientY) && !zone.hasPointerCapture(e.pointerId)) { try { zone.setPointerCapture(e.pointerId); } catch (err) { /* そのままでも動く */ } }
@@ -1003,6 +1058,39 @@
     const tend = () => { if (tb && tb.mode === "sheet") finish(); tb = null; };
     body.addEventListener("touchend", tend);
     body.addEventListener("touchcancel", tend);
+
+    // 中身（マウス）。指と同じ決め方で、シートを引っぱれるようにする（文字は選択しない）
+    const skipSel = "a,button,input,textarea,select,label,[contenteditable],.mk-grip,.mm-photos,.mv-gal";
+    let mb = null;
+    body.addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "mouse" || e.button !== 0 || e.target.closest(skipSel)) { mb = null; return; }
+      e.preventDefault();
+      mb = { y: e.clientY, id: e.pointerId, mode: null };
+    });
+    body.addEventListener("pointermove", (e) => {
+      if (!mb || e.pointerId !== mb.id) return;
+      const dy = e.clientY - mb.y;
+      if (!mb.mode) {
+        if (Math.abs(dy) < 6) return;
+        const up = dy < 0;
+        mb.mode = (up && cur() !== "full") || (!up && body.scrollTop <= 0) ? "sheet" : "none";
+        if (mb.mode === "sheet") { begin(mb.y); try { body.setPointerCapture(e.pointerId); } catch (err) { /* そのままでも動く */ } }
+      }
+      if (mb.mode === "sheet") follow(e.clientY);
+    });
+    const mend = (e) => {
+      if (!mb || e.pointerId !== mb.id) return;
+      if (mb.mode === "sheet") {
+        finish();
+        // 引っぱり終わりのクリックで、カードなどが開かないように
+        const stop = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+        window.addEventListener("click", stop, { capture: true, once: true });
+        setTimeout(() => window.removeEventListener("click", stop, { capture: true }), 0);
+      }
+      mb = null;
+    };
+    body.addEventListener("pointerup", mend);
+    body.addEventListener("pointercancel", mend);
   }
 
   /* ---------- つくる ---------- */
@@ -1056,13 +1144,15 @@
       setTimeout(() => { const f = $("#mk-name"); if (f) f.focus(); }, 300);
       return;
     }
-    const plan = { id: d.id || "p" + Date.now(), name: d.name.trim(), start: d.start, stops: d.stops.map((s) => ({ ...s })), from: d.from };
+    // 保存するときに、記事の値段から予算の目安を出して、予定といっしょに残す
+    const budget = budgetOf(d.stops);
+    const plan = { id: d.id || "p" + Date.now(), name: d.name.trim(), start: d.start, stops: d.stops.map((s) => ({ ...s })), from: d.from, budget };
     const i = state.plans.findIndex((p) => p.id === plan.id);
     if (i >= 0) state.plans[i] = plan; else state.plans.unshift(plan);
     // たどっている途中の予定を直したときは、たどる側も新しい予定にする
     if (state.plan && state.plan.planId === plan.id) state.plan = null;
     d.id = plan.id; d.dirty = false;
-    toast(i >= 0 ? "上書き保存しました" : "保存しました。「たどる」から選べます");
+    toast(`${i >= 0 ? "上書き保存しました" : "保存しました"}。${budgetText(budget)}`);
     renderSheet();
   }
   function onMake(t) {
@@ -1204,7 +1294,7 @@
     }
     const not = new Set([...lock.map((l) => l.spot), ...(skip ? [skip.spot] : [])]);
     const picked = (prefill ? prefill.stops.slice(prefill.fromIndex) : pl.stops.slice(restFrom)).filter((s) => live(s) && !not.has(s.spot));
-    const rest = picked.map((s) => ({ spot: s.spot, stay: s.stay }));
+    const rest = picked.map((s) => (s.pickWhy ? { spot: s.spot, stay: s.stay, pickWhy: s.pickWhy, replacedFrom: s.replacedFrom } : { spot: s.spot, stay: s.stay }));
     // おまかせの結果は「開くまで待つ」時間を含む。待つ分は、ひとつ前の場所に長くいることにする
     if (prefill) {
       let prevDepart = start + lock.reduce((a, l) => a + l.stay, 0);
@@ -1328,7 +1418,7 @@
         ? `<div class="gallery ${photos.length > 1 ? "many" : ""}">${photos.map((ph, k) => `<figure><img src="${img(ph.src, photos.length > 1)}" alt="${esc(ph.cap || sp.name)}" loading="${i === 0 && k === 0 ? "eager" : "lazy"}" data-full="${ph.src}" data-cap="${esc(ph.cap || "")}">${ph.cap ? `<figcaption>${esc(ph.cap)}</figcaption>` : ""}</figure>`).join("")}</div>${photos.length > 1 ? `<div class="gallery-hint">${photos.length}枚・横にずらすと次の写真</div>` : ""}`
         : `<div class="photo" style="${photoStyle(sp)}">${esc(sp.kind)}${sp.style ? "・" + esc(sp.style) : ""}（写真はまだありません）</div>`;
       const text = s.text && s.text.length ? s.text.map((t) => `<p>${esc(t)}</p>`).join("") : `<p>${esc(s.note)}</p>`;
-      const mv = i > 0 && sch[i] ? `<div class="stop-move">${ICON.walk}${esc(spotById[r.spots[i - 1].spot].name)}から${moveText(sch[i])}${gLink(gmapLeg(spotById[r.spots[i - 1].spot], sp, sch[i].mode), "行き方", "inline")}</div>` : "";
+      const mv = i > 0 && sch[i] ? `<div class="stop-move">${sch[i].mode === "ride" ? IC.train : ICON.walk}${esc(spotById[r.spots[i - 1].spot].name)}から${moveText(sch[i])}${modeTag(sch[i])}${gLink(gmapLeg(spotById[r.spots[i - 1].spot], sp, sch[i].mode), "行き方", "inline")}</div>` : "";
       const info = [
         hours ? `<div><dt>営業</dt><dd>${esc(hours)}</dd></div>` : "",
         sp.closed ? `<div><dt>休み</dt><dd>${esc(sp.closed)}</dd></div>` : "",
@@ -1477,7 +1567,7 @@
       const mine = s.status === "replaced" ? (s.alternatives.find((a) => a.id === s.spot) || s.alternatives[0]) : null;
       if (mine) {
         html += `<div class="why">${esc(spotById[s.replacedFrom].name)}：${esc(s.reason)}</div>`;
-        html += `<div class="why" style="margin-top:4px">選んだ理由：${esc(mine.why.join("、"))}</div>`;
+        html += s.pickWhy ? whyChips(s.pickWhy) : `<div class="why" style="margin-top:4px">選んだ理由：${esc(mine.why.join("、"))}</div>`;
       }
       html += "</div>";
       const others = mine ? s.alternatives.filter((a) => a.id !== s.spot) : [];
@@ -2288,7 +2378,7 @@
     $("#sheet-head").addEventListener("click", onSheetClick); // 見出しのボタン（たどる：一覧へ）
     sb.addEventListener("input", (e) => { if (e.target.id === "mk-name") { state.draft.name = e.target.value; state.draft.dirty = true; } });
     sb.addEventListener("change", (e) => {
-      if (e.target.id === "mk-start" && e.target.value) { state.draft.start = R.toMin(e.target.value); state.draft.dirty = true; renderSheet(); }
+      if (e.target.id === "mk-start" && e.target.value) { state.draft.start = R.toMin(e.target.value); state.draft.dirty = true; renderSheet(); drawMap(false); } // 地図の着く時刻と注意も直す
     });
 
     // 読む

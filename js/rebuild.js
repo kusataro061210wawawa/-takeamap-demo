@@ -93,7 +93,7 @@
       else if (opts.rain && !spot.indoor) reason = "雨のため屋外を避ける";
       else if (!fits(spot, arrive, orig.stay)) reason = "着く時間に開いていない";
 
-      let chosen = spot, alternatives = [];
+      let chosen = spot, alternatives = [], pickWhy = null;
       if (reason) {
         const tagOf = spot.kind === "ラーメン" ? "ラーメン" : spot.tags[0];
         const cands = data.spots.filter((c) => {
@@ -107,14 +107,17 @@
           const w = walkMin(pos, c), a = t + w;
           const f = fav[c.id];
           const why = [];
+          // 選んだ理由を、あとで予定のカードに出せる形でも残す（誰が「また行きたい」か・屋内／屋外・歩く分数）
+          const io = c.io || (c.indoor ? "屋内" : "屋外");
+          const pickWhy = { who: null, liked: null, group: null, style: null, io, walk: w };
           let score = 0;
-          if (f && f.rating === 3) { score += 100; why.push(writerName(data, f.writer) + "さんが「また行きたい」"); }
-          else if (f && f.rating === 2) { score += 40; why.push(writerName(data, f.writer) + "さんが「よかった」"); }
-          if (spot.style && c.style === spot.style) { score += 30; why.push("同じ" + c.style + "系"); }
+          if (f && f.rating === 3) { score += 100; pickWhy.who = writerName(data, f.writer); pickWhy.liked = "また行きたい"; why.push(pickWhy.who + "さんが「また行きたい」"); }
+          else if (f && f.rating === 2) { score += 40; pickWhy.who = writerName(data, f.writer); pickWhy.liked = "よかった"; why.push(pickWhy.who + "さんが「よかった」"); }
+          if (spot.style && c.style === spot.style) { score += 30; pickWhy.style = c.style; why.push("同じ" + c.style + "系"); }
           const g = (c.groupLikes && c.groupLikes[tagOf]) || 0;
-          if (g) { score += g * 2; why.push(tagOf + "好き" + g + "人が「また行きたい」"); }
-          score -= w * 3; why.push("歩いて" + w + "分");
-          return { id: c.id, walk: w, arrive: a, score, why, ok: w <= maxWalk && fits(c, a, orig.stay) };
+          if (g) { score += g * 2; pickWhy.group = { tag: tagOf, n: g }; why.push(tagOf + "好き" + g + "人が「また行きたい」"); }
+          score -= w * 3; why.push(io); why.push("歩いて" + w + "分");
+          return { id: c.id, walk: w, arrive: a, score, why, pickWhy, ok: w <= maxWalk && fits(c, a, orig.stay) };
         }).filter((c) => c.ok).sort((a, b) => b.score - a.score);
         alternatives = cands.slice(0, 3);
         if (!cands.length) {
@@ -126,7 +129,7 @@
         const pref = opts.prefer && opts.prefer[orig.spot];
         if (pref) { const p = cands.find((x) => x.id === pref); if (p) pick = p; }
         chosen = byId[pick.id];
-        walk = pick.walk; mode = "walk"; arrive = pick.arrive;
+        walk = pick.walk; mode = "walk"; arrive = pick.arrive; pickWhy = pick.pickWhy;
         used.add(chosen.id);
       }
 
@@ -144,7 +147,7 @@
       out.push({
         spot: chosen.id, stay, walk, mode, arrive: start, depart: start + stay,
         status: status === "kept" && shifted ? "shifted" : status,
-        reason, replacedFrom: reason ? orig.spot : null, alternatives,
+        reason, replacedFrom: reason ? orig.spot : null, alternatives, pickWhy,
         before: { arrive: orig.arrive, stay: orig.stay },
       });
       pos = chosen; t = start + stay;
@@ -154,7 +157,25 @@
 
   function writerName(data, id) { const w = data.writers.find((x) => x.id === id); return w ? w.name : id; }
 
-  const api = { toMin, fmt, distM, walkMin, moveMin, restEnd, favoriteRatings, buildSchedule, rebuild };
+  /* 日の入りの時刻（日本時間の 0:00 からの分）。緯度・経度と日付から、NOAA の簡易式で計算する（誤差は数分）。
+     白夜・極夜で日の入りがない日は null */
+  function sunsetMin(lat, lng, date = new Date()) {
+    const rad = Math.PI / 180;
+    const j = new Date(date.getTime() + 9 * 3600e3); // 日本時間の日付で数える
+    const y = j.getUTCFullYear();
+    const n = Math.round((Date.UTC(y, j.getUTCMonth(), j.getUTCDate()) - Date.UTC(y, 0, 1)) / 864e5) + 1; // その年の何日目か
+    const days = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 366 : 365;
+    const g = (2 * Math.PI / days) * (n - 1 + (7 - 12) / 24); // 日の入りのころ（世界時 7時ごろ）
+    const eqt = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+    const decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+    const cosH = (Math.cos(90.833 * rad) - Math.sin(lat * rad) * Math.sin(decl)) / (Math.cos(lat * rad) * Math.cos(decl));
+    if (cosH > 1 || cosH < -1) return null;
+    const ha = Math.acos(cosH) / rad;               // 日の入りの時角（度）
+    const utc = 720 - 4 * lng + 4 * ha - eqt;       // 世界時の分（経度は東が正）
+    return Math.round(((utc + 9 * 60) % 1440 + 1440) % 1440);
+  }
+
+  const api = { toMin, fmt, distM, walkMin, moveMin, restEnd, favoriteRatings, buildSchedule, rebuild, sunsetMin };
   if (typeof module !== "undefined") module.exports = api;
   if (typeof window !== "undefined") window.TAM_REBUILD = api;
 })();

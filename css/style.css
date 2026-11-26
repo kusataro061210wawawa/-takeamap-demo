@@ -839,3 +839,33 @@ a.tool-btn { color: #1A73E8; }
 .pk-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 700; color: var(--green); margin: 8px 2px 2px; }
 .picker-row.pk-plain { touch-action: auto; cursor: pointer; }
 .picker-head > .i { width: 24px; height: 24px; color: var(--green); margin-top: 2px; }
+
+/* ===== おまかせの理由・移動手段・予算の目安・日の入り・シートを引っぱるとき（2026-11-26） ===== */
+/* 移動の分数の横の、移動手段の札 */
+.mv-mode { flex: none; display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; line-height: 1; color: var(--gray); background: #EEF1EC; border-radius: 8px; padding: 2px 6px; white-space: nowrap; }
+.mv-mode.ride { color: #2B6A86; background: #E4EFF4; }
+.tl-leg.moving .tl-walk .mv-mode { background: #fff; color: #2B7DE9; }
+.stop-move .mv-mode { margin-left: 2px; }
+.stop-move .i { width: 15px; height: 15px; }
+/* おまかせで選んだ理由（カードの中に残す） */
+.why-box { margin-top: 6px; background: #FFF1EA; border: 1px solid #F6CDBD; border-radius: 10px; padding: 5px 8px 6px; }
+.why-box > small { display: flex; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 800; color: var(--orange); }
+.why-box > small .i { width: 12px; height: 12px; }
+.why-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.why-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--ink); background: #fff; border: 1px solid #F0D9CF; border-radius: 10px; padding: 1px 7px; white-space: nowrap; }
+.why-chip .i { width: 12px; height: 12px; color: var(--gray); }
+.why-chip.like { color: var(--rust); font-weight: 700; white-space: normal; }
+.why-chip.like .i { color: var(--orange); }
+.alt .why-box { margin-top: 6px; }
+/* 予算の目安（保存の下） */
+.mk-budget { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #F4F6EF; }
+.mk-budget > .i { width: 18px; height: 18px; color: var(--green); flex: none; margin-top: 1px; }
+.mk-budget > span { display: flex; flex-direction: column; min-width: 0; line-height: 1.4; }
+.mk-budget b { font-size: 14px; color: var(--green); }
+.mk-budget small { font-size: 11px; color: var(--gray); }
+/* 日の入りより後に着く */
+.mk-warn.sunset { color: #6A4A9C; background: #EFEAF8; }
+/* シートは文字を選択しない（入力欄はそのまま）。引っぱっている間は、ページ全体で選択しない */
+.sheet { -webkit-user-select: none; user-select: none; }
+.sheet input, .sheet textarea, .sheet [contenteditable="true"] { -webkit-user-select: text; user-select: text; }
+html.sheet-dragging, html.sheet-dragging * { -webkit-user-select: none !important; user-select: none !important; cursor: grabbing !important; }
