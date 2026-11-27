@@ -8,16 +8,20 @@
   const spotById = Object.fromEntries(D.spots.map((s) => [s.id, s]));
   const writerById = Object.fromEntries(D.writers.map((w) => [w.id, w]));
   const recById = Object.fromEntries(D.records.map((r) => [r.id, r]));
+  // 自分（この端末で見ている人）。自分で公開した記事の書き手になる
+  const ME = { id: "me", name: V.name, initial: "A", color: "#56859C", art: "me", self: true, bio: "建築とラーメンが好きな大学生", mainTag: "旅行", stats: { records: {}, favorites: 0, retention: 0, wentFromArticles: 0 } };
+  D.writers.push(ME); writerById.me = ME;
   const RATING = { 3: "また行きたい", 2: "よかった", 1: "合わなかった" };
   const OMIYA = [35.9115, 139.6265];
   const KIND_BG = {
     "建築": ["#56859C", "#123D2B"], "ラーメン": ["#E86B45", "#8E3A1E"], "カフェ": ["#B08968", "#6F4E37"], "名所": ["#7F8C84", "#123D2B"],
     "公園": ["#97BC62", "#2C5F2D"], "博物館": ["#56859C", "#21295C"], "美術館": ["#A26769", "#6D2E46"], "店": ["#A7BEAE", "#626E66"], "山": ["#97BC62", "#2C5F2D"],
     "グルメ": ["#D9963A", "#7A3E12"], "海": ["#5AA6C8", "#1D4E6B"], "駅": ["#8A9AA6", "#2F3E48"],
+    "図書館": ["#56859C", "#123D2B"], "コンビニ": ["#7FB4A2", "#2F5E52"], "ホテル": ["#A99BC4", "#4A3E6B"], "場所": ["#9AA89E", "#3E4A42"],
   };
   // つくるで場所を押したときの滞在時間のめやす（分）
-  const STAY_BY_KIND = { "ラーメン": 40, "カフェ": 45, "博物館": 90, "美術館": 60, "公園": 40, "名所": 45, "建築": 60, "店": 60, "山": 150, "グルメ": 45, "海": 60, "駅": 20 };
-  const defaultStay = (sp) => STAY_BY_KIND[sp.kind] || 45;
+  const STAY_BY_KIND = { "ラーメン": 40, "カフェ": 45, "博物館": 90, "美術館": 60, "公園": 40, "名所": 45, "建築": 60, "店": 60, "山": 150, "グルメ": 45, "海": 60, "駅": 20, "コンビニ": 10, "ホテル": 30, "図書館": 60, "場所": 45 };
+  const defaultStay = (sp) => sp.stay || STAY_BY_KIND[sp.kind] || 45; // stay：記事の「いた時間」から入れた値
   const ICON = {
     back: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
     lock: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>',
@@ -63,6 +67,18 @@
     tree: ic('<path d="M12 3l5.5 8h-3l4 6h-13l4-6h-3z"/><path d="M12 17v4"/>'),
     yen: ic('<path d="M7 4l5 7.5L17 4M12 11.5V20M8 13h8M8 16.5h8"/>'),
     sun: ic('<path d="M3 18h18M7.5 18a4.5 4.5 0 019 0"/><path d="M12 8.5V10.5M5.6 11.6l1.4 1.4M18.4 11.6L17 13M3.5 15h2M18.5 15h2"/>'),
+    images: ic('<rect x="7" y="7" width="14" height="12" rx="2"/><path d="M4 16V6a2 2 0 012-2h10"/><circle cx="11.5" cy="11" r="1.5"/><path d="M21 16l-4-3.5-6 5.5"/>'),
+    link: ic('<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>'),
+    plus: ic('<path d="M12 5v14M5 12h14"/>'),
+    up: ic('<path d="M12 19V5M6 11l6-6 6 6"/>'),
+    down: ic('<path d="M12 5v14M6 13l6 6 6-6"/>'),
+    lock: ic('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>'),
+    globe: ic('<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.5 5.4 3.5 8.5s-1 5.9-3.5 8.5c-2.5-2.6-3.5-5.4-3.5-8.5s1-5.9 3.5-8.5z"/>'),
+    search: ic('<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>'),
+    eye: ic('<path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>'),
+    info: ic('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/>'),
+    next: ic('<path d="M9 5l7 7-7 7"/>'),
+    prev: ic('<path d="M15 5l-7 7 7 7"/>'),
   };
   const VIS = [["public", "公開"], ["member", "メンバー限定"], ["private", "非公開"]];
   const visLabel = (k) => (VIS.find((v) => v[0] === k) || VIS[0])[1];
@@ -89,9 +105,12 @@
                              //   phase：at（cur に ついた）／go（cur へ移動中。from を でた）／end（全部まわった）
     rain: false, delay: 0, closed: [],
     pending: null,           // 組み直しの結果（まだ決めていない）
+    // 自分の記録。場所ごとに mine（わたしの記録：自分だけ。本文は書く画面と同じ形）と、
+    // pub（同じ場所の公開する記事 { title, vis: public / member, tags, info, html, recId }。書いたときだけ）を持つ。note は本文のはじめの文
+    found: null,             // 探す・つくる：名前で探して見つけた場所（地図に印を出す）
     myRecords: [
-      { id: "my1", title: "神保町で古本と喫茶", date: "2026-10-04", spots: [{ name: "神保町の古書店街", lat: 35.6960, lng: 139.7580, rating: 3, note: "棚を見ているだけで一日終わる。", vis: "public" }] },
-      { id: "my2", title: "上野の美術館で雨宿り", date: "2026-09-13", spots: [{ name: "上野公園の美術館", lat: 35.7188, lng: 139.7765, rating: 2, note: "雨の日でも楽しめた。", vis: "public" }] },
+      { id: "my1", title: "神保町で古本と喫茶", date: "2026-10-04", spots: [{ name: "神保町の古書店街", lat: 35.6960, lng: 139.7580, rating: 3, note: "棚を見ているだけで一日終わる。", mine: "<p>棚を見ているだけで一日終わる。</p>", pub: null }] },
+      { id: "my2", title: "上野の美術館で雨宿り", date: "2026-09-13", spots: [{ name: "上野公園の美術館", lat: 35.7188, lng: 139.7765, rating: 2, note: "雨の日でも楽しめた。", mine: "<p>雨の日でも楽しめた。</p>", pub: null }] },
     ],
   };
 
@@ -107,15 +126,37 @@
     return null;
   }
   function badges(w, rec) {
-    if (w.official) return '<span class="badge official">公式</span>';
+    if (w.self) return '<span class="badge self">自分の記事</span>';
+    if (w.official) return `<span class="badge official">${w.shop ? "店の公式" : "公式"}</span>`;
     const k = favKind(w.id, rec);
     if (k === "fav") return '<span class="badge fav">お気に入り</span>';
     if (k === "tagfav") return `<span class="badge tagfav">${esc(V.tagFavorites[w.id].join("・"))}だけお気に入り</span>`;
     return "";
   }
-  // 「く」1文字だと戻る矢印に見えるので、くさたろは2文字にする
+  /* アカウントの絵（本番は、その人が選んだ写真やアイコンになる）。記事のカード・書き手・地図のピンで同じ絵を出す。
+     背景はその人の色。絵のない人は名前の1文字目（「く」1文字だと戻る矢印に見えるので、くさたろは2文字） */
+  const AW = "#FFFDF7", AL = "#D8EE72", AO = "#F2A27E", AY = "#F2C94C", AK = "rgba(0,0,0,.28)", AS = "#9CC9E0";
+  const ART = {
+    books: `<path d="M5 25.5h22" stroke="${AW}" stroke-width="2" stroke-linecap="round"/><rect x="7.5" y="9" width="5" height="15.5" rx="1" fill="${AW}"/><rect x="13.5" y="6.5" width="5" height="18" rx="1" fill="${AL}"/><rect x="20.2" y="10" width="5" height="14.5" rx="1" fill="${AO}" transform="rotate(12 22.7 17.2)"/><path d="M8.5 12.5h3M14.5 10h3" stroke="${AK}" stroke-width="1.2"/>`,
+    boat: `<path d="M3 26.5c2.2 0 2.2-1.6 4.4-1.6s2.2 1.6 4.4 1.6 2.2-1.6 4.4-1.6 2.2 1.6 4.4 1.6 2.2-1.6 4.4-1.6 2.2 1.6 4.4 1.6" fill="none" stroke="${AW}" stroke-width="1.6" stroke-linecap="round"/><path d="M7.5 20h17l-2.8 3.8H10.3z" fill="${AO}"/><path d="M16 5.5v14.5" stroke="${AW}" stroke-width="1.5"/><path d="M16.8 6.5l7 12.5h-7z" fill="${AW}"/><path d="M15.2 9.5l-5.6 9.5h5.6z" fill="${AL}"/>`,
+    ramen: `<path d="M11 4.5l4.5 10M15 4l2.5 10.5" stroke="${AW}" stroke-width="1.6" stroke-linecap="round"/><path d="M5.5 15.5h21a10.5 9 0 01-21 0z" fill="${AW}"/><path d="M8.5 15.5c1.4-2 2.8-2 4.2 0s2.8 2 4.2 0 2.8-2 4.2 0" fill="none" stroke="${AY}" stroke-width="1.7"/><circle cx="22.6" cy="13.3" r="2.3" fill="${AY}" stroke="${AW}" stroke-width="1"/><rect x="12" y="24.8" width="8" height="2" rx="1" fill="${AW}"/>`,
+    flag: `<path d="M10 5.5v21" stroke="${AW}" stroke-width="2" stroke-linecap="round"/><path d="M11 6.5h12l-2.6 4 2.6 4H11z" fill="${AW}"/><circle cx="16.3" cy="10.5" r="2" fill="${AK}"/><path d="M6 26.5h14" stroke="${AW}" stroke-width="2" stroke-linecap="round"/>`,
+    cityhall: `<path d="M16 4.5v5" stroke="${AW}" stroke-width="1.4"/><path d="M16.6 4.8h5.2l-1.4 1.8 1.4 1.8h-5.2z" fill="${AL}"/><path d="M6.5 14L16 9.5l9.5 4.5z" fill="${AW}"/><rect x="8" y="15" width="16" height="9" fill="${AW}"/><path d="M11.2 17v5M14.4 17v5M17.6 17v5M20.8 17v5" stroke="${AK}" stroke-width="1.5"/><rect x="5.5" y="24.5" width="21" height="2.2" rx="1.1" fill="${AW}"/>`,
+    tram: `<path d="M12 6.5h8M16 6.5v3" stroke="${AW}" stroke-width="1.4" stroke-linecap="round"/><rect x="6.5" y="9.5" width="19" height="13" rx="3.5" fill="${AW}"/><rect x="9" y="12" width="6" height="4.5" rx="1" fill="${AS}"/><rect x="17" y="12" width="6" height="4.5" rx="1" fill="${AS}"/><path d="M6.5 19h19" stroke="${AL}" stroke-width="1.6"/><circle cx="11" cy="23.6" r="1.4" fill="${AW}"/><circle cx="21" cy="23.6" r="1.4" fill="${AW}"/><path d="M4 26h24" stroke="${AW}" stroke-width="1.5" stroke-linecap="round"/>`,
+    bowl: `<path d="M5 7h22" stroke="${AW}" stroke-width="2" stroke-linecap="round"/><path d="M6.5 8h5.6v8.5l-2.8 1.5-2.8-1.5zM13.2 8h5.6v8.5L16 18l-2.8-1.5zM19.9 8h5.6v8.5l-2.8 1.5-2.8-1.5z" fill="${AW}"/><path d="M9.5 21.5c.9 1 .9 2.2 0 3.3M16 21.5c.9 1 .9 2.2 0 3.3M22.5 21.5c.9 1 .9 2.2 0 3.3" stroke="${AO}" stroke-width="1.6" fill="none" stroke-linecap="round"/>`,
+    shirt: `<path d="M11.5 6.5L5.5 10l2.6 4.6 2.4-1.3V26h11V13.3l2.4 1.3 2.6-4.6-6-3.5c-.8 1.8-2.5 2.8-4.5 2.8s-3.7-1-4.5-2.8z" fill="${AW}"/><rect x="17.4" y="15" width="3.2" height="3.4" rx=".7" fill="${AL}"/>`,
+    camera: `<rect x="5.5" y="10.5" width="21" height="14" rx="3" fill="${AW}"/><path d="M11 10.5l1.5-3h7l1.5 3z" fill="${AW}"/><circle cx="16" cy="17.5" r="4.6" fill="#3B3355"/><circle cx="16" cy="17.5" r="2.4" fill="${AS}"/><circle cx="22.6" cy="13.4" r="1" fill="${AO}"/>`,
+    mountain: `<circle cx="23.5" cy="9.5" r="3" fill="${AY}"/><path d="M2.5 27l9.5-14 5 7 3.2-4.2L29.5 27z" fill="${AW}"/><path d="M12 13l2.4 3.4-1.3-.4-1.1 1-1.1-1-1.3.4z" fill="${AL}"/>`,
+    me: `<circle cx="16" cy="13" r="5.6" fill="${AW}"/><path d="M5.5 28.5c1.3-6 5.3-8.5 10.5-8.5s9.2 2.5 10.5 8.5z" fill="${AW}"/><path d="M10.4 12.6c.4-4.2 3-6.4 6.3-6.1 3 .3 4.8 2.4 5 5.4-2.6-.3-5-1.4-6.6-3.2-1 1.8-2.6 3.2-4.7 3.9z" fill="#2F3E48"/>`,
+  };
   const initial = (w) => w.initial || w.name[0];
-  const avatar = (w, cls = "") => { const t = initial(w); return `<span class="avatar ${cls} ${t.length > 1 ? "two" : ""}" style="background:${w.color}">${esc(t)}</span>`; };
+  const artSvg = (w) => (w && ART[w.art] ? `<svg viewBox="0 0 32 32" aria-hidden="true">${ART[w.art]}</svg>` : "");
+  const avatar = (w, cls = "") => {
+    const a = artSvg(w);
+    if (a) return `<span class="avatar art ${cls}" style="background:${w.color}" role="img" aria-label="${esc(w.name)}">${a}</span>`;
+    const t = initial(w);
+    return `<span class="avatar ${cls} ${t.length > 1 ? "two" : ""}" style="background:${w.color}">${esc(t)}</span>`;
+  };
   const ratingTag = (n) => `<span class="rating r${n}">${RATING[n]}</span>`;
   // 写真がない場所は、場所の種類の色で埋める
   function photoStyle(spot) {
@@ -124,7 +165,8 @@
   }
 
   /* 写真：images/ の名前（src）から。small = カードや吹き出し用の小さい版 */
-  const img = (src, small) => `images/${src}${small ? "-s" : ""}.jpg`;
+  // 自分で入れた写真（data: の URL）は、そのまま使う
+  const img = (src, small) => (/^(data:|blob:|https?:)/.test(src) ? src : `images/${src}${small ? "-s" : ""}.jpg`);
   /* 自分で入れる写真：長い辺を max まで小さくして JPEG にし直す（描き直すので、位置情報などの Exif は残らない）。
      試作なので端末の中（メモリ）だけに置き、どこにも送らない */
   function shrinkPhoto(file, max = 1280) {
@@ -146,6 +188,8 @@
   const stopPhotos = (r, spotId) => { const s = stopOf(r, spotId); return (s && s.photos) || []; };
   function coverSrc(r) {
     if (r.cover) return r.cover;
+    const lp = r.leadBlocks && photosOfBlocks(r.leadBlocks)[0]; // 書く画面の「はじめに」に入れた写真
+    if (lp) return lp.src;
     const s = r.spots.find((x) => x.photos && x.photos.length);
     return s ? s.photos[0].src : null;
   }
@@ -175,7 +219,7 @@
      前の版でこの端末に入れた Map Tiles API のキーが残っていれば消す */
   try { localStorage.removeItem("tam-google-key"); } catch (e) { /* なくてもよい */ }
   // ピンの見た目：{ html, size, anchor }（anchor：地図の位置に合わせる、ピンの中の点）
-  const PIN_SIZE = { fav: 26, official: 26, mine: 22, saved: 20, other: 16, num: 28 };
+  const PIN_SIZE = { fav: 26, official: 26, mine: 22, saved: 20, other: 16, num: 28, found: 32 };
   function divPin(cls, inner, extra = "") {
     const n = PIN_SIZE[cls.split(" ")[0]] || 22;
     return { html: `<div class="pin ${cls}" style="${extra}">${inner || ""}</div>`, size: [n, n], anchor: [n / 2, n / 2] };
@@ -258,7 +302,8 @@
   const sheetOver = () => Math.max(0, sheetPx() - MAP_B);
 
   /* 探す：地図に映っている範囲（上の検索・タグと、下のシートに隠れていない所） */
-  let areaTimer = null, areaBounds = null;
+  // areaOver：範囲を決めたときにシートが地図に重なっていた高さ。シートを引き上げただけ（地図は動いていない）なら範囲は変えない
+  let areaTimer = null, areaBounds = null, areaOver = 0;
   function computeArea() {
     if (!map) return null;
     const size = map.getSize();
@@ -270,7 +315,7 @@
   }
   function updateArea() {
     if (stage() !== "explore") return;
-    areaBounds = computeArea();
+    areaBounds = computeArea(); areaOver = sheetOver();
     renderSheet();
     const body = $("#sheet-body");
     body.classList.remove("waiting", "fresh"); void body.offsetWidth; body.classList.add("fresh");
@@ -285,7 +330,7 @@
   function visibleRecords() {
     return D.records.filter((r) => {
       if (state.tag && !r.tags.includes(state.tag)) return false;
-      if (r.official) return true;
+      if (r.official || r.writer === "me") return true; // 自分で公開した記事も出す
       if (state.mode === "fav") return !!favKind(r.writer, r);
       if (state.mode === "group") {
         const rec = writerById[r.writer].stats.records;
@@ -309,6 +354,7 @@
     if (st === "explore") pts = drawRecords(false);
     if (st === "make" || st === "redo") { const rp = drawRecords(true), dp = drawDraft(); pts = dp.length ? dp : rp; }
     if (st === "follow") pts = drawFollow();
+    drawFound(st);
     if (fit && pts.length) fitTo(pts);
     refreshBubbles();
   }
@@ -349,7 +395,7 @@
     Object.values(seen).forEach(({ rank, r, s, sp, color, fk, saved }) => {
       if (inDraft.has(sp.id)) return; // 予定に入れた場所は番号のピンで出す
       const kind = saved ? "saved" : r.official ? "official" : fk ? "fav" : "other";
-      const icon = kind === "saved" ? divPin("saved", "") : kind === "official" ? divPin("official", "公式") : kind === "fav" ? divPin("fav", esc(writerById[r.writer].name[0]), `background:${color}`) : divPin("other", "");
+      const icon = kind === "saved" ? divPin("saved", "") : kind === "official" ? divPin("official", "公式") : kind === "fav" ? divPin("fav", artSvg(writerById[r.writer]) || esc(initial(writerById[r.writer])[0]), `background:${color}`) : divPin("other", "");
       if (!make) icon.title = sp.name;
       addPin([sp.lat, sp.lng], icon, { half: PIN_SIZE[kind] / 2, prio: rank, sp, r, s }, () => (make ? toggleDraftSpot(sp.id) : openArticle(r.id)));
       if (!make && state.mode === "group") {
@@ -649,6 +695,8 @@
   }
 
   /* 地図の上：探すは検索、つくる・たどるは切り替え */
+  // 名前で場所を探すボタン（つくる・組み直す）。探すは上の検索の帯から
+  const searchBtn = `<button class="stage-search" data-act="search" aria-label="場所を名前で探す">${IC.search}<span>探す</span></button>`;
   function renderTop() {
     const st = stage();
     $("#top-search").hidden = st !== "explore";
@@ -656,9 +704,9 @@
     $("#chips").hidden = st === "follow";
     $("#modes").hidden = st === "follow";
     if (st === "redo") {
-      $("#stage-bar").innerHTML = `<div class="stage-title"><b>組み直す</b><span>行く場所を地図で選ぶ</span></div><span class="demo-badge">試作・データは仮</span>`;
+      $("#stage-bar").innerHTML = `<div class="stage-title"><b>組み直す</b><span>行く場所を地図で選ぶ</span></div>${searchBtn}`;
     } else if (st !== "explore") {
-      $("#stage-bar").innerHTML = `<div class="seg stage-seg">${[["make", IC.cal, "つくる"], ["follow", IC.route, "たどる"]].map(([k, i, l]) => `<button data-stage="${k}" class="${st === k ? "on" : ""}">${i}${l}</button>`).join("")}</div><span class="demo-badge">試作・データは仮</span>`;
+      $("#stage-bar").innerHTML = `<div class="seg stage-seg">${[["make", IC.cal, "つくる"], ["follow", IC.route, "たどる"]].map(([k, i, l]) => `<button data-stage="${k}" class="${st === k ? "on" : ""}">${i}${l}</button>`).join("")}</div>${st === "make" ? searchBtn : '<span class="demo-badge">試作・データは仮</span>'}`;
     }
   }
   function renderChips() {
@@ -673,6 +721,8 @@
     const st = stage(), body = $("#sheet-body");
     const keep = body.dataset.stage === st ? body.scrollTop : 0;
     if (st !== "explore") body.classList.remove("waiting", "fresh");
+    // たどっている途中は、シートのふちを色つきの光で光らせて「いま進んでいる予定」だとわかるようにする
+    $("#sheet").classList.toggle("live", st === "follow" && !!state.plan && !state.followList && state.plan.phase !== "end");
     if (st === "explore") renderExploreSheet();
     else if (st === "make") renderMakeSheet();
     else if (st === "redo") renderRedoSheet();
@@ -709,7 +759,7 @@
     if (off.length) html += `<div class="section-label">公式（自治体・企業）</div>` + off.map(recordCard).join("");
     if (!all.length) html = `<div class="empty">この条件の記事はまだありません。<br>「同じ趣味の人たち」に切り替えてみてください。</div>`;
     else if (!recs.length) html = `<div class="empty">地図に映っている範囲には、記事がありません。<br>地図を縮小するか、動かしてみてください。<br><br><button class="btn ghost small" data-act="fit-all">記事のある場所を表示する（${all.length}件）</button></div>`;
-    $("#sheet-body").innerHTML = html;
+    $("#sheet-body").innerHTML = foundCard() + html;
   }
 
   /* つくる：予定表。縮めているときは順番だけ、引き上げると時間の調整と保存 */
@@ -822,15 +872,15 @@
     const span = n ? `${R.fmt(sch[0].arrive)}–${R.fmt(sch[n - 1].depart)}` : "";
     $("#sheet-head").innerHTML = `<b>予定をつくる</b><small>${n ? `${n}か所・${span}` : "地図の場所を押して始める"}</small>`;
     if (!n) {
-      $("#sheet-body").innerHTML = `<div class="mk-steps">
+      $("#sheet-body").innerHTML = foundCard() + `<div class="mk-steps">
           <span>${IC.pin}<b>場所を押す</b></span><span class="arr">›</span><span><i class="mk-num">1</i><b>順に入る</b></span><span class="arr">›</span><span>${IC.save}<b>名前を付けて保存</b></span>
         </div>
-        <div class="small mk-steps-note">もう一度押すと外れます。「読む」の記事の「つくる」から、書いた人のルートを入れることもできます。</div>`;
+        <div class="small mk-steps-note">もう一度押すと外れます。記事のない場所は、上の「探す」で名前から。「読む」の記事の「つくる」から、書いた人のルートを入れることもできます。</div>`;
       return;
     }
     const chain = sch.map((s, i) => `<span class="chain-stop"><i>${i + 1}</i>${R.fmt(s.arrive)} ${esc(spotById[s.spot].name)}</span>`).join('<span class="chain-arrow">›</span>');
     const route = gmapRoute(sch.map((x) => spotById[x.spot]), sch.some((x) => x.mode === "ride") ? "" : "walking");
-    $("#sheet-body").innerHTML = `<div class="chain">${chain}</div>
+    $("#sheet-body").innerHTML = foundCard() + `<div class="chain">${chain}</div>
       <div class="mk-bar">
         <label class="mk-start" title="出発の時刻">${IC.clock}<span>出発</span><input type="time" class="time-in" id="mk-start" value="${R.fmt(d.start)}" step="300"></label>
         <a class="tool-btn" href="${route}" target="_blank" rel="noopener" title="この順番で Google マップを開く">${IC.pin}<span>Google</span></a>
@@ -856,7 +906,7 @@
     // 次に押した場所が入る番号（いまの場所のすぐあと。続けて押すと、その次）
     const ins = Math.min(Math.max(d.ins == null ? lk : d.ins, lk), d.stops.length);
     $("#sheet-head").innerHTML = `<b>組み直す</b><small>${n ? `このあと${n}か所・〜${R.fmt(sch[sch.length - 1].depart)}` : "このあとの予定がありません"}</small>`;
-    $("#sheet-body").innerHTML = `<div class="redo-hint">${IC.pin}<span>地図の場所を押すと <i class="mk-num">${numOf(d, ins)}</i> に入ります</span>${condChips()}</div>
+    $("#sheet-body").innerHTML = foundCard() + `<div class="redo-hint">${IC.pin}<span>地図の場所を押すと <i class="mk-num">${numOf(d, ins)}</i> に入ります</span>${condChips()}</div>
       <div class="redo-act">
         <button class="btn accent" data-mk="redo-apply" ${n ? "" : "disabled"}>${IC.check}この予定にする</button>
         <button class="btn ghost small" data-mk="redo-auto" ${canAuto ? "" : "disabled"} title="趣味の合う人の記録で並べ直す">${IC.spark}おまかせ<small>${left}</small></button>
@@ -944,7 +994,7 @@
         <button class="rail-btn ${state.delay ? "on" : ""}" data-act="d-delay" title="30分遅れている">${IC.delay}<small>遅れ</small></button>
         <button class="rail-btn" data-act="d-reset" title="最初に戻す">${IC.reset}<small>最初</small></button>
       </div>`;
-    $("#sheet-head").innerHTML = `<b>${esc(pl.title)}</b><button class="head-btn" data-fl="list" title="ほかの予定を選ぶ">${IC.list}<span>一覧</span></button>`;
+    $("#sheet-head").innerHTML = `${ph !== "end" ? '<span class="live-tag"><i></i>進行中</span>' : ""}<b>${esc(pl.title)}</b><button class="head-btn" data-fl="list" title="ほかの予定を選ぶ">${IC.list}<span>一覧</span></button>`;
     $("#sheet-body").innerHTML = `<div class="fl-wrap"><div class="fl-main">
         ${status}
         ${alerts.map(([i, t]) => `<div class="fl-alert">${i}<span>${t}</span></div>`).join("")}
@@ -966,7 +1016,8 @@
     sheetDrag({
       el: $("#sheet"), handle: $("#sheet-handle"), head: $("#sheet-head"), body: $("#sheet-body"),
       snaps: () => { const h = $("#view-map").clientHeight; return { peek: 132, half: h * 0.52, full: h - 100 }; },
-      onSnap: (next) => { setSheet(next); if (stage() === "explore") scheduleArea(350); },
+      // 探す：シートを引き上げても地図は動いていないので、それまでの範囲の記事をそのまま出す。下げて地図が広く見えたときだけ範囲を広げる
+      onSnap: (next) => { setSheet(next); if (stage() === "explore" && sheetOver() < areaOver) scheduleArea(350); },
     });
   }
   // 引き出すシートの動き（探す・予定の地図と、自分のマップで同じものを使う）。onSnap(高さ) で止める高さを決める
@@ -1392,75 +1443,159 @@
   function miniMap(id, spots, numbered, color) {
     const el = document.getElementById(id);
     const pts = spots.map((s) => [s.lat, s.lng]);
-    GM.create(el, { center: pts[0] || OMIYA, zoom: pts.length ? 15 : 12, gesture: "cooperative" }).then((m) => {
-      if (!m) return;
+    return GM.create(el, { center: pts[0] || OMIYA, zoom: pts.length ? 15 : 12, gesture: "cooperative" }).then((m) => {
+      if (!m) return null;
       panelMaps.push(m);
       const g = m.group();
       if (numbered && pts.length > 1) g.line(pts, { color: color || "#E86B45", weight: 4, opacity: 0.85 });
       spots.forEach((s, i) => g.marker([s.lat, s.lng], { ...divPin(s.mine ? "mine" : "fav", numbered ? String(i + 1) : "", s.mine ? "" : `background:${color || "#123D2B"}`), title: s.name }));
       if (pts.length > 1) m.fit(pts, { pad: 0.2, maxZoom: 17 });
+      return m;
     });
   }
 
   function openArticle(id) { showPanel((p) => renderArticle(p, id)); }
-  function renderArticle(p, id) {
-    const r = recById[id], w = writerById[r.writer], fk = favKind(w.id, r);
+  // 記事の写真をすべて（見出し画像を1枚目に）。記事を開いたときのいちばん上で、横にずらして見る
+  function articlePhotos(r) {
+    const out = [], seen = new Set();
+    const all = [...(r.leadBlocks ? photosOfBlocks(r.leadBlocks) : []), ...r.spots.flatMap((s) => s.photos || [])];
+    const add = (src, cap) => { if (src && !seen.has(src)) { seen.add(src); out.push({ src, cap: cap || "" }); } };
+    if (r.cover) add(r.cover, (all.find((x) => x.src === r.cover) || {}).cap);
+    all.forEach((x) => add(x.src, x.cap));
+    return out;
+  }
+  function carouselHTML(list) {
+    if (!list.length) return "";
+    const many = list.length > 1;
+    return `<div class="art-car ${many ? "many" : ""}">
+      <div class="art-car-row">${list.map((ph, k) => `<figure><img src="${esc(img(ph.src))}" alt="${esc(ph.cap || "")}" loading="${k ? "lazy" : "eager"}" data-zoom="${esc(img(ph.src))}" data-cap="${esc(ph.cap || "")}">${ph.cap ? `<figcaption>${esc(ph.cap)}</figcaption>` : ""}</figure>`).join("")}</div>
+      ${many ? `<span class="art-car-n" data-car-n>1 / ${list.length}</span>
+        <button class="art-car-btn prev" data-car="-1" aria-label="前の写真">${IC.prev}</button><button class="art-car-btn next" data-car="1" aria-label="次の写真">${IC.next}</button>
+        ${list.length <= 12 ? `<div class="art-car-dots">${list.map((_, k) => `<i class="${k ? "" : "on"}"></i>`).join("")}</div>` : ""}` : ""}
+    </div>`;
+  }
+  function bindCarousel(root) {
+    $$(".art-car.many", root).forEach((c) => {
+      const row = $(".art-car-row", c), n = $("[data-car-n]", c), dots = $$(".art-car-dots i", c), total = $$("figure", row).length;
+      const at = () => Math.round(row.scrollLeft / Math.max(1, row.clientWidth));
+      row.addEventListener("scroll", () => { const k = at(); n.textContent = `${k + 1} / ${total}`; dots.forEach((d, j) => d.classList.toggle("on", j === k)); }, { passive: true });
+      $$("[data-car]", c).forEach((b) => b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const k = Math.max(0, Math.min(total - 1, at() + Number(b.dataset.car)));
+        row.scrollTo({ left: k * row.clientWidth, behavior: "smooth" });
+      }));
+    });
+  }
+  const routeSchedule = (r) => (r.type === "route" ? R.buildSchedule(D, { start: r.start || "10:00", spots: r.spots.map((s) => ({ spot: s.spot, stay: s.stay || defaultStay(spotById[s.spot]) })) }) : []);
+  /* 場所の情報（営業時間・休み・住所・屋内／屋外・費用・滞在・行き方）。記事の本文には入れず、
+     場所の「詳しく」から、記事の場所をすべて順番にまとめて出す（押した場所のところを開く） */
+  function openSpotDetails(r, at = 0, pv = false, onClose = null) {
+    const old = $("#sd"); if (old) old.remove();
+    const sch = routeSchedule(r), n = r.spots.length;
+    const items = r.spots.map((s, i) => {
+      const sp = spotById[s.spot], v = infoView(s.info || {}, sp), saved = V.saved.some((x) => x.spot === sp.id);
+      if (s.stay) v.stay = stayText(s.stay);
+      const kv = [v.io, v.price, v.stay ? "滞在 " + v.stay : "", sp.style].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join("");
+      const dl = [["営業", v.hours], ["休み", v.closed], ["住所", v.addr]].filter(([, x]) => x).map(([k, x]) => `<div><dt>${k}</dt><dd>${esc(x)}</dd></div>`).join("");
+      const prev = i > 0 && sch[i] ? spotById[r.spots[i - 1].spot] : null;
+      const mv = prev ? `<div class="sd-move">${moveIcon(sch[i])}<span>${esc(prev.name)}から${moveText(sch[i])}</span>${modeTag(sch[i])}${gLink(gmapLeg(prev, sp, sch[i].mode), "行き方", "inline")}</div>` : "";
+      return `${mv}<section class="sd-item" data-sd="${i}">
+        <div class="sd-head">${n > 1 ? `<i>${i + 1}</i>` : ""}<b>${esc(sp.name)}</b><small>${esc(sp.kind)}</small></div>
+        ${kv ? `<div class="kv">${kv}</div>` : ""}
+        ${dl ? `<dl class="stop-info">${dl}</dl>` : '<div class="small sd-none">営業時間や住所は、まだ書かれていません</div>'}
+        <div class="sd-links">${gLink(gmapPlace(sp), "Google マップで開く")}${pv ? "" : `<button class="save-btn ${saved ? "on" : ""}" data-save="${sp.id}">${saved ? "登録済み" : "＋ 登録"}</button>`}</div>
+      </section>`;
+    }).join("");
+    const route = n > 1 ? `<div class="sd-route">${gLink(gmapRoute(r.spots.map((s) => spotById[s.spot]), sch.some((x) => x.mode === "ride") ? "" : "walking"), `${n}か所を順番に Google マップで開く`)}</div>` : "";
+    const box = document.createElement("div");
+    box.className = "picker-back sd-back"; box.id = "sd";
+    box.innerHTML = `<div class="picker sd-sheet" role="dialog" aria-label="場所の情報">
+      <div class="picker-head">${IC.info}<div><b>場所の情報</b><div class="small">${n > 1 ? `「${esc(r.title)}」の${n}か所を、記事の順番に。` : ""}行く前に、お店や施設の公式の案内でも確かめてください</div></div></div>
+      <div class="picker-list sd-list">${items}${route}</div>
+      <div class="picker-foot"><span></span><button class="btn primary small" data-sd-close>閉じる</button></div>
+    </div>`;
+    $("#app").appendChild(box);
+    requestAnimationFrame(() => {
+      box.classList.add("show");
+      const el = $(`[data-sd="${at}"]`, box), list = $(".sd-list", box);
+      if (!el) return;
+      if (at > 0) list.scrollTop += el.getBoundingClientRect().top - list.getBoundingClientRect().top - 6;
+      if (n > 1) { el.classList.add("on"); setTimeout(() => el.classList.remove("on"), 1800); }
+    });
+    box.addEventListener("click", (e) => {
+      const sv = e.target.closest("[data-save]");
+      if (sv) { const on = toggleSaved(sv.dataset.save); sv.classList.toggle("on", on); sv.textContent = on ? "登録済み" : "＋ 登録"; return; }
+      if (e.target.closest("[data-sd-close]") || e.target === box) { box.remove(); if (onClose) onClose(); }
+    });
+  }
+  /* 記事を読む画面。opt：{ rec：まだ公開していない記事（プレビュー）, preview：true なら登録・つくるなどのボタンを出さない, onMap(地図) } */
+  function renderArticle(p, id, opt = {}) {
+    const r = opt.rec || recById[id], w = writerById[r.writer], fk = favKind(w.id, r), pv = !!opt.preview;
     const isMember = V.memberships.includes(w.id);
-    const favBtn = w.official ? "" : `<button class="btn small ${fk === "fav" ? "lime" : "ghost"}" id="fav-btn">${fk === "fav" ? "お気に入り中" : "お気に入りに入れる"}</button>`;
+    const favBtn = pv || w.official || w.self ? "" : `<button class="btn small ${fk === "fav" ? "lime" : "ghost"}" id="fav-btn">${fk === "fav" ? "お気に入り中" : "お気に入りに入れる"}</button>`;
     // ルートの記事は、場所のあいだの移動も出す
-    const sch = r.type === "route" ? R.buildSchedule(D, { start: r.start, spots: r.spots.map((s) => ({ spot: s.spot, stay: s.stay || defaultStay(spotById[s.spot]) })) }) : [];
+    const sch = routeSchedule(r);
     const stops = r.spots.map((s, i) => {
       const sp = spotById[s.spot];
-      const hours = hoursText(sp);
       const saved = V.saved.some((x) => x.spot === sp.id);
       const photos = s.photos || [];
       const gallery = photos.length
-        ? `<div class="gallery ${photos.length > 1 ? "many" : ""}">${photos.map((ph, k) => `<figure><img src="${img(ph.src, photos.length > 1)}" alt="${esc(ph.cap || sp.name)}" loading="${i === 0 && k === 0 ? "eager" : "lazy"}" data-full="${ph.src}" data-cap="${esc(ph.cap || "")}">${ph.cap ? `<figcaption>${esc(ph.cap)}</figcaption>` : ""}</figure>`).join("")}</div>${photos.length > 1 ? `<div class="gallery-hint">${photos.length}枚・横にずらすと次の写真</div>` : ""}`
+        ? `<div class="gallery ${photos.length > 1 ? "many" : ""}">${photos.map((ph, k) => `<figure><img src="${img(ph.src, photos.length > 1)}" alt="${esc(ph.cap || sp.name)}" loading="lazy" data-full="${ph.src}" data-cap="${esc(ph.cap || "")}">${ph.cap ? `<figcaption>${esc(ph.cap)}</figcaption>` : ""}</figure>`).join("")}</div>${photos.length > 1 ? `<div class="gallery-hint">${photos.length}枚・横にずらすと次の写真</div>` : ""}`
         : `<div class="photo" style="${photoStyle(sp)}">${esc(sp.kind)}${sp.style ? "・" + esc(sp.style) : ""}（写真はまだありません）</div>`;
       const text = s.text && s.text.length ? s.text.map((t) => `<p>${esc(t)}</p>`).join("") : `<p>${esc(s.note)}</p>`;
+      // 書く画面で書いた記事：本文（画像・写真の列・見出し…）を書いた順に出す
+      const rich = !!s.blocks;
       const mv = i > 0 && sch[i] ? `<div class="stop-move">${sch[i].mode === "ride" ? IC.train : ICON.walk}${esc(spotById[r.spots[i - 1].spot].name)}から${moveText(sch[i])}${modeTag(sch[i])}${gLink(gmapLeg(spotById[r.spots[i - 1].spot], sp, sch[i].mode), "行き方", "inline")}</div>` : "";
-      const info = [
-        hours ? `<div><dt>営業</dt><dd>${esc(hours)}</dd></div>` : "",
-        sp.closed ? `<div><dt>休み</dt><dd>${esc(sp.closed)}</dd></div>` : "",
-        sp.addr ? `<div><dt>住所</dt><dd>${esc(sp.addr)}</dd></div>` : "",
-      ].join("");
+      // 場所ごとのタグ（駅・自然・グルメなど）
+      const stags = (s.tags || []).map((t) => `<span class="stop-tag">#${esc(t)}</span>`).join("");
       return `${mv}<div class="stop"><div class="stop-no">${i + 1}</div><div class="stop-main">
-        <div class="stop-title"><b>${esc(sp.name)}</b> ${ratingTag(s.rating)}<button class="save-btn ${saved ? "on" : ""}" data-save="${sp.id}">${saved ? "登録済み" : "＋ 登録"}</button></div>
+        <div class="stop-title"><b>${esc(sp.name)}</b> ${ratingTag(s.rating)}${stags}${pv ? "" : `<button class="save-btn ${saved ? "on" : ""}" data-save="${sp.id}">${saved ? "登録済み" : "＋ 登録"}</button>`}<button class="more-btn" data-more="${i}">${IC.info}詳しく</button></div>
         ${s.head ? `<div class="stop-head">${esc(s.head)}</div>` : ""}
-        ${gallery}
-        <div class="stop-text">${text}</div>
-        <div class="kv"><span>${ioText(sp)}</span>${sp.priceText ? `<span>${esc(sp.priceText)}</span>` : sp.price ? `<span>目安 ${sp.price.toLocaleString()}円</span>` : ""}${s.stay ? `<span>滞在 ${s.stay >= 60 ? (s.stay / 60).toFixed(s.stay % 60 ? 1 : 0) + "時間" : s.stay + "分"}</span>` : ""}${sp.style ? `<span>${esc(sp.style)}</span>` : ""}</div>
-        ${info ? `<dl class="stop-info">${info}</dl>` : ""}
-        ${gLink(gmapPlace(sp), "Google マップで開く")}
+        ${rich ? `<div class="stop-text ab">${flowHTML(s.blocks)}</div>` : `${gallery}
+        <div class="stop-text">${text}</div>`}
       </div></div>`;
     }).join("");
-    const routeLink = r.type === "route" ? `<div class="route-gmap">${gLink(gmapRoute(r.spots.map((s) => spotById[s.spot]), sch.some((x) => x.mode === "ride") ? "" : "walking"), `このルートを Google マップで開く（${r.spots.length}か所）`)}</div>` : "";
+    const n = r.spots.length;
+    const routeLink = r.type === "route" ? `<div class="route-gmap">${gLink(gmapRoute(r.spots.map((s) => spotById[s.spot]), sch.some((x) => x.mode === "ride") ? "" : "walking"), `このルートを Google マップで開く（${n}か所）`)}</div>` : "";
+    const infoAll = `<button class="art-info-all" data-more="0">${IC.info}<span><b>${n > 1 ? `${n}か所の` : ""}場所の情報</b><small>営業時間・休み・住所・${n > 1 ? "行き方" : "Google マップ"}</small></span>${ICON.chev}</button>`;
     const lock = r.member ? (isMember
       ? `<div class="lock"><b>メンバー限定</b><div>${esc(r.member.body)}</div></div>`
       : `<div class="lock"><b>${ICON.lock} メンバー限定</b><div style="margin:4px 0 10px">${esc(r.member.teaser)}</div>
           <button class="btn primary small" id="join-btn">メンバーになって読む（月${w.membership.price}円）</button></div>`) : "";
+    // 公式の特集で、書き手と組んだもの
+    const cw = r.collab && writerById[r.collab];
+    const collab = cw ? `<button class="collab" data-writer="${cw.id}">${avatar(cw, "sm")}<span>書き手 <b>${esc(cw.name)}</b> さんと組んだ特集</span>${ICON.chev}</button>` : "";
     // つくるの途中で開いたときは「足す」、それ以外は書いた人のルートで「つくる」
-    const n = r.spots.length;
     const redoing = stage() === "redo";
     const appending = editing() && (redoing || state.draft.stops.length > 0);
     const have = appending ? new Set([...ed().stops.map((x) => x.spot), ...(redoing ? redoUsed() : [])]) : new Set();
     const fresh = appending ? r.spots.filter((s) => !have.has(s.spot)).length : n;
     const ctaLabel = appending ? (!fresh ? "この記事の場所は、もう予定に入っています" : n > 1 ? `このルートを予定の後ろに足す（${fresh}か所）` : "この場所を予定に足す") : (n > 1 ? "このルートで予定をつくる（無料）" : "この場所から予定をつくる");
-    const cta = `<div class="sticky-cta"><button class="btn accent block" id="make-btn" ${appending && !fresh ? "disabled" : ""}>${ICON.calplus}${ctaLabel}</button>${appending ? `<div class="small" style="text-align:center;margin-top:6px">${redoing ? "組み直している予定" : `つくっている予定（${state.draft.stops.length}か所）`}の後ろに足します</div>` : ""}</div>`;
-    p.innerHTML = bar(w.official ? "公式の特集" : "記事") + `<div class="pad">
+    const cta = pv ? "" : `<div class="sticky-cta"><button class="btn accent block" id="make-btn" ${appending && !fresh ? "disabled" : ""}>${ICON.calplus}${ctaLabel}</button>${appending ? `<div class="small" style="text-align:center;margin-top:6px">${redoing ? "組み直している予定" : `つくっている予定（${state.draft.stops.length}か所）`}の後ろに足します</div>` : ""}</div>`;
+    const mmId = pv ? "mm-art-pv" : "mm-art";
+    p.innerHTML = (pv ? "" : bar(w.official ? (w.shop ? "店の公式" : "公式の特集") : "記事")) + `${carouselHTML(articlePhotos(r))}<div class="pad">
       <div class="writer-row"><button data-writer="${w.id}" style="display:flex;align-items:center;gap:10px">${avatar(w)}<span class="name">${esc(w.name)}</span></button>${badges(w, r)}<span style="margin-left:auto">${favBtn}</span></div>
+      ${collab}
       <div class="h1">${esc(r.title)}</div>
-      <div class="meta"><span>${esc(r.date)}</span><span>${r.type === "route" ? `ルート ${r.spots.length}か所` : "1か所の記録"}</span><span>記事を見て「行った」${r.went}人</span></div>
-      <div class="kv" style="margin-top:6px">${r.tags.map((t) => `<span>#${esc(t)}</span>`).join("")}${r.stamp ? "<span>スタンプラリー（架空の企画）</span>" : ""}</div>
-      ${r.lead ? `<p class="lead">${esc(r.lead)}</p>` : ""}
-      <div class="minimap" id="mm-art"></div>
+      <div class="meta"><span>${esc(r.date)}</span><span>${n > 1 ? `ルート ${n}か所` : "1か所の記録"}</span><span>記事を見て「行った」${r.went}人</span></div>
+      <div class="kv" style="margin-top:6px">${r.tags.map((t) => `<span>#${esc(t)}</span>`).join("")}${r.stamp ? "<span>スタンプラリー（架空の企画）</span>" : ""}${r.vis === "member" ? `<span class="kv-member">${IC.lock}メンバー限定</span>` : ""}</div>
+      ${r.leadBlocks && r.leadBlocks.length ? `<div class="ab lead-ab">${flowHTML(r.leadBlocks)}</div>` : r.lead ? `<p class="lead">${esc(r.lead)}</p>` : ""}
+      <div class="minimap" id="${mmId}"></div>
       ${routeLink}
+      ${infoAll}
       ${stops}${lock}
     </div>${cta}`;
     // 写真を押すと大きく見る
     $$("[data-full]", p).forEach((im) => im.addEventListener("click", () => openPhoto(img(im.dataset.full), im.dataset.cap)));
-    miniMap("mm-art", r.spots.map((s) => spotById[s.spot]), r.type === "route", r.official ? "#E86B45" : w.color);
-    $("[data-writer]", p).addEventListener("click", () => openWriter(w.id));
+    $$("[data-zoom]", p).forEach((im) => im.addEventListener("click", () => openPhoto(im.dataset.zoom, im.dataset.cap)));
+    bindCarousel(p);
+    const mm = miniMap(mmId, r.spots.map((s) => spotById[s.spot]), r.type === "route", r.official ? "#E86B45" : w.color);
+    if (opt.onMap) opt.onMap(mm);
+    // 詳しく：記事の場所をすべて、順番に（閉じたら、登録のボタンをそろえる）
+    const syncSaves = () => $$("[data-save]", p).forEach((b) => { const on = V.saved.some((x) => x.spot === b.dataset.save); b.classList.toggle("on", on); b.textContent = on ? "登録済み" : "＋ 登録"; });
+    $$("[data-more]", p).forEach((b) => b.addEventListener("click", () => openSpotDetails(r, Number(b.dataset.more), pv, syncSaves)));
+    if (pv) return;
+    $$("[data-writer]", p).forEach((b) => b.addEventListener("click", () => openWriter(b.dataset.writer)));
     const fb = $("#fav-btn", p);
     if (fb) fb.addEventListener("click", () => { toggleFav(w.id); paint(); });
     const jb = $("#join-btn", p);
@@ -1677,12 +1812,17 @@
   // 読むのタグで出すか：複数の場所の記事（ルート）はメインタグだけで出す。1か所の記事は、付いているタグのどれでも出す
   const isMulti = (r) => r.type === "route" || r.spots.length > 1;
   const readHit = (r, tag) => !tag || (isMulti(r) ? mainTag(r) === tag : r.tags.includes(tag));
-  // 並べる順番：写真のある記事を先に。その中で お気に入りの書き手 → タグだけお気に入り → 公式 → ほか。同じならルートを先に、「行った」人が多い順
+  // 並べる順番：写真のある記事を先に。その中で お気に入りの書き手 → タグだけお気に入り → ほか。同じならルートを先に、「行った」人が多い順。
+  // 公式（自治体・観光局・店）の記事は先頭にしないで、4番目と、そのあと7つおきに1つずつ混ぜる（残りは最後に）
   function readFeed() {
-    const score = (r) => { if (r.official) return 1; const k = favKind(r.writer, r); return k === "fav" ? 3 : k ? 2 : 0; };
-    return D.records
+    const score = (r) => { const k = favKind(r.writer, r); return k === "fav" ? 3 : k ? 2 : 0; };
+    const list = D.records
       .filter((r) => readHit(r, state.readTag))
       .sort((a, b) => !!coverSrc(b) - !!coverSrc(a) || score(b) - score(a) || (b.type === "route") - (a.type === "route") || b.went - a.went);
+    const off = list.filter((r) => r.official), out = [];
+    let k = 0;
+    list.filter((r) => !r.official).forEach((r, i) => { out.push(r); if (k < off.length && i >= 3 && (i - 3) % 7 === 0) out.push(off[k++]); });
+    return out.concat(off.slice(k));
   }
   function routeSummary(r) {
     const n = r.spots.length;
@@ -1727,8 +1867,9 @@
     const w = writerById[r.writer], fk = favKind(r.writer, r);
     const tag = state.readTag || mainTag(r);
     const pcls = coverSrc(r) ? "photo" : "";
+    const off = w.official ? `<span class="off-label">${IC.flag}${w.shop ? "店の公式" : "公式"}</span>` : "";
     const head = `${pcls ? "" : `<span class="cover-word">${esc(spotById[r.spots[0].spot].kind)}</span>`}
-      <span class="tag-label" style="background:${tagColor(tag)}">#${esc(tag)}</span>
+      <span class="tag-label" style="background:${tagColor(tag)}">#${esc(tag)}</span>${off}
       <span class="thumb-map">${routeThumb(r)}</span>`;
     // 記事ごとの「つくる」：書いた人のルートを先に入れて、つくるを開く
     const make = `<button class="make-btn" data-make="${r.id}" aria-label="この記事から予定をつくる">${ICON.calplus}つくる</button>`;
@@ -1737,8 +1878,8 @@
         <span class="cover-body"><span class="cover-title">${esc(r.title)}</span>
         <span class="cover-who">${avatar(w, "sm")}<b>${esc(w.name)}</b>${make}</span></span></div>`;
     }
-    const lock = r.member ? `<span>${ICON.lock.replace('width="16" height="16"', 'width="13" height="13"')} メンバー限定あり</span>` : "";
-    const mark = w.official ? '<span class="badge official">公式</span>' : fk === "fav" ? '<span class="badge fav">お気に入り</span>' : "";
+    const lock = r.member || r.vis === "member" ? `<span>${ICON.lock.replace('width="16" height="16"', 'width="13" height="13"')} メンバー限定${r.member ? "あり" : ""}</span>` : "";
+    const mark = !w.official && fk === "fav" ? '<span class="badge fav">お気に入り</span>' : ""; // 公式は表紙の左上に印
     return `<div class="hero cover ${pcls}" role="button" tabindex="0" data-rec="${r.id}" style="${coverStyle(r, true)}">${head}
       <span class="cover-body">
         <span class="cover-title">${esc(r.title)}</span>
@@ -1779,7 +1920,7 @@
       pin("mine", ll, key, on, s.name);
       if (infos) infos.push({ ll, half: PIN_SIZE.mine / 2, prio: on ? 99 : 6, b: {
         cls: "is-mine" + (on ? " is-sel" : ""), z: on ? 500 : 0, name: s.name, title: "「" + r.title + "」", rating: s.rating,
-        who: "自分の記録・" + visLabel(s.vis), go: on ? "" : "見る ›", photoUrl: (s.photos || [])[0], onClick: () => onPick && onPick(key),
+        who: s.pub && s.pub.recId ? "自分の記録・記事も公開中" : "自分の記録", go: on ? "" : "見る ›", photoUrl: (s.photos || [])[0], onClick: () => onPick && onPick(key),
       } });
     }));
     if (filter !== "rec") V.saved.forEach((x) => {
@@ -1822,7 +1963,7 @@
         <div class="section-label">記録</div>
         ${state.myRecords.length ? "" : '<div class="small">まだ記録がありません。</div>'}
         ${state.myRecords.map((r) => `<div class="card"><h3 style="margin-top:0">${esc(r.title)}</h3><div class="meta"><span>${esc(r.date)}</span><span>${r.spots.length}か所</span></div>
-          ${r.spots.map((s, i) => `<button class="me-spot" data-mm="ms-${r.id}-${i}">${(s.photos || []).length ? `<img class="thumb" src="${s.photos[0]}" alt="" style="width:100%;height:120px">` : ""}<span class="me-spot-top"><b>${esc(s.name)}</b><span class="me-spot-go">地図で見る ›</span></span><span>${ratingTag(s.rating)} <span class="small">${visLabel(s.vis)}${(s.photos || []).length ? `・写真${s.photos.length}枚` : ""}</span></span><span class="small">${esc(s.note)}</span></button>`).join("")}</div>`).join("")}
+          ${r.spots.map((s, i) => `<button class="me-spot" data-mm="ms-${r.id}-${i}">${(s.photos || []).length ? `<img class="thumb" src="${s.photos[0]}" alt="" style="width:100%;height:120px">` : ""}<span class="me-spot-top"><b>${esc(s.name)}</b><span class="me-spot-go">地図で見る ›</span></span><span>${ratingTag(s.rating)} <span class="small">${s.pub && s.pub.recId ? "記事も公開中" : "自分だけ"}${(s.photos || []).length ? `・写真${s.photos.length}枚` : ""}</span></span><span class="small">${esc(s.note || "")}</span></button>`).join("")}</div>`).join("")}
         <div class="section-label">お気に入りの書き手</div>
         ${favs.map((w) => `<button class="card" data-writer="${w.id}"><div class="card-top">${avatar(w)}<b>${esc(w.name)}</b><span class="badge fav">お気に入り</span></div><div class="small" style="margin-top:4px">${esc(w.bio)}</div></button>`).join("")}
         ${tagFavs.map(({ w, t }) => `<button class="card" data-writer="${w.id}"><div class="card-top">${avatar(w)}<b>${esc(w.name)}</b><span class="badge tagfav">${esc(t.join("・"))}だけお気に入り</span></div></button>`).join("")}
@@ -1851,7 +1992,7 @@
     p.innerHTML = `<div class="mm-full">
       <div class="mm-map" id="mm-mine"></div>
       <div class="map-top mm-top">
-        <div class="mm-bar"><button class="back mm-backbtn" aria-label="戻る">${ICON.back}</button><div class="stage-title"><b>自分のマップ</b><span>場所を押すと、写真とひとことが見られます</span></div><span class="demo-badge">試作・データは仮</span></div>
+        <div class="mm-bar"><button class="back mm-backbtn" aria-label="戻る">${ICON.back}</button><div class="stage-title"><b>自分のマップ</b><span>場所を押すと、写真と記録が見られます</span></div><span class="demo-badge">試作・データは仮</span></div>
         <div class="seg mm-seg" id="mm-seg"></div>
       </div>
       <div class="sheet ${state.myMapSheet}" id="mm-sheet">
@@ -1938,7 +2079,7 @@
     // 何も選んでいないとき：場所の一覧（押すと選ぶ）
     function listView() {
       const f = state.myMapFilter;
-      head.innerHTML = `<b>${f === "saved" ? "登録した場所" : f === "rec" ? "自分の記録" : "自分のマップ"}</b><small>場所を押すと、写真とひとことが見られます</small>`;
+      head.innerHTML = `<b>${f === "saved" ? "登録した場所" : f === "rec" ? "自分の記録" : "自分のマップ"}</b><small>場所を押すと、写真と記録が見られます</small>`;
       let html = legend;
       if (f !== "saved") {
         html += `<div class="section-label">自分の記録</div>`;
@@ -1961,16 +2102,33 @@
     const viewGallery = (list, alt) => `<div class="mv-gal ${list.length > 1 ? "many" : ""}">${list.map((ph, k) => `<figure>
         <img src="${esc(ph.url)}" alt="${esc(ph.cap || alt)}" data-zoom="${esc(ph.full || ph.url)}" data-cap="${esc(ph.cap || "")}" loading="${k ? "lazy" : "eager"}">
         ${list.length > 1 ? `<span class="mv-n">${k + 1}/${list.length}</span>` : ""}${ph.cap ? `<figcaption>${esc(ph.cap)}</figcaption>` : ""}</figure>`).join("")}</div>`;
+    /* 自分の記録を見る：記事と同じ並び（場所 → 写真 → 本文）。上の地図はない（地図から開いているので）。
+       上が「わたしの記録」（自分だけ）、下が「公開する記事」（書いたときだけ） */
     function mineShow(t) {
-      const { r, i, s } = t, photos = (s.photos || []).map((u) => ({ url: u }));
+      const { r, i, s } = t;
       head.innerHTML = `${listBtn}<b>${esc(s.name)}</b>${editBtn}`;
       const sibs = r.spots.length > 1 ? `<div class="mm-sibs"><span>同じ記録の場所</span>${r.spots.map((x, j) => `<button data-pick="ms-${esc(r.id)}-${j}" class="${j === i ? "on" : ""}">${esc(x.name)}</button>`).join("")}</div>` : "";
+      const mine = blocksOf(mineHTML(s)), pub = s.pub, prec = pub && pub.recId && recById[pub.recId];
+      const pblocks = pub ? blocksOf(pub.html) : [];
+      // 写真：見出し画像を1枚めに、記録の写真、わたしの記録の本文の写真（同じものは1回だけ）
+      const seen = new Set(), photos = [];
+      [s.cover, ...(s.photos || []), ...photosOfBlocks(mine).map((x) => x.src)].forEach((u) => { if (u && !seen.has(u)) { seen.add(u); photos.push({ url: img(u) }); } });
       body.innerHTML = `<div class="mv">
-        ${photos.length ? viewGallery(photos, s.name) : `<div class="mv-noph mine">${IC.image}<span>写真はまだありません</span><button class="mini-btn" data-edit>写真を足す</button></div>`}
         <div class="mv-title"><b>${esc(s.name)}</b>${ratingTag(s.rating)}</div>
-        <div class="mv-meta"><span>${IC.cal}${esc(r.date)}</span><span>${visLabel(s.vis)}</span></div>
-        ${s.note ? `<blockquote class="mv-note">${esc(s.note)}</blockquote>` : '<div class="mv-empty">ひとことはまだありません</div>'}
-        <div class="mv-from">${IC.list}<span>記録「${esc(r.title)}」${r.spots.length > 1 ? `の${i + 1}か所目` : ""}</span></div>
+        <div class="mv-meta"><span>${IC.cal}${esc(r.date)}</span><span>${IC.list}記録「${esc(r.title)}」${r.spots.length > 1 ? `の${i + 1}か所目` : ""}</span></div>
+        ${photos.length ? viewGallery(photos, s.name) : `<div class="mv-noph mine">${IC.image}<span>写真はまだありません</span><button class="mini-btn" data-edit>写真を足す</button></div>`}
+        <section class="mv-sec mine">
+          <div class="mv-band mine">${IC.lock}<b>わたしの記録</b><small>自分だけ</small><button class="mini-btn" data-rw-open="mine">${IC.edit}書く</button></div>
+          ${mine.length ? `<div class="ab mv-ab">${flowHTML(mine)}</div>` : '<div class="mv-empty">まだ書いていません。「書く」から、写真や見出しも入れて記録できます。</div>'}
+        </section>
+        ${pub ? `<section class="mv-sec pub">
+          <div class="mv-band pub">${IC.globe}<b>公開する記事</b><small>${prec ? `公開中・${visLabel(pub.vis)}` : "下書き（まだ公開していません）"}</small><button class="mini-btn" data-rw-open="pub">${IC.edit}直す</button></div>
+          ${pub.cover ? `<img class="mv-pcover" src="${esc(img(pub.cover))}" alt="公開する記事の見出し画像" data-zoom="${esc(img(pub.cover))}">` : ""}
+          <div class="mv-ptitle">${esc(pub.title || "（タイトルなし）")}</div>
+          ${pblocks.length ? `<div class="ab mv-ab">${flowHTML(pblocks)}</div>` : '<div class="mv-empty">本文はまだありません。</div>'}
+          ${infoBoxHTML(infoView(pub.info || {}, spotFor(s, false) || { name: s.name }))}
+          ${prec ? `<button class="mv-cm-go" data-open-rec="${prec.id}">記事として見る（みんなに見える形）${ICON.chev}</button>` : ""}
+        </section>` : `<button class="mv-pubadd" data-rw-open="pub"><span class="mini-pen">${IC.edit}</span><span class="mv-pubadd-tx"><b>公開する記事も書く</b><small>同じ画面の下に、みんなに見せる記事を書けます。わたしの記録はそのまま自分だけ</small></span></button>`}
         ${sibs}
       </div>`;
     }
@@ -2002,6 +2160,7 @@
     // 自分の記録の場所を直す
     function mineView(t) {
       const { r, i, s } = t;
+      const mb = blocksOf(mineHTML(s)), mph = photosOfBlocks(mb).slice(0, 3), mtx = plainOf(mb).slice(0, 90);
       head.innerHTML = `${listBtn}<b>${esc(s.name)}</b>${doneBtn}`;
       const sibs = r.spots.length > 1 ? `<div class="mm-sibs"><span>同じ記録の場所</span>${r.spots.map((x, j) => `<button data-pick="ms-${esc(r.id)}-${j}" class="${j === i ? "on" : ""}">${esc(x.name)}</button>`).join("")}</div>` : "";
       body.innerHTML = `<div class="mm-ed">
@@ -2011,10 +2170,16 @@
         ${photosBlock(photosOf(t))}
         <div class="mm-lb">評価</div>
         <div class="rate-btns">${[3, 2, 1].map((n) => `<button class="r${n} ${s.rating === n ? "on" : ""}" data-rate="${n}">${RATING[n]}</button>`).join("")}</div>
-        <label class="mm-lb" for="mm-note">ひとこと</label>
-        <input class="field" id="mm-note" data-note value="${esc(s.note)}" placeholder="ひとこと（1〜2文）">
-        <div class="mm-lb">公開範囲</div>
-        <div class="vis">${VIS.map(([k, l]) => `<button data-vis="${k}" class="${s.vis === k ? "on" : ""}">${l}</button>`).join("")}</div>
+        <div class="mm-lb">わたしの記録 <span class="mm-lock">${IC.lock}自分だけ（非公開）</span></div>
+        <div class="myrec">
+          <button class="myrec-card" data-rw-open="mine">
+            ${mph.length ? `<span class="myrec-ph">${mph.map((x) => `<img src="${esc(img(x.src))}" alt="">`).join("")}</span>` : ""}
+            <span class="myrec-tx ${mtx ? "" : "ph"}">${esc(mtx || "押して書く。写真・見出し・リンクも、記事と同じように入れられます")}</span>
+            <span class="myrec-go">${IC.edit}${mtx || mph.length ? "続きを書く" : "書く"}</span>
+          </button>
+          <button class="mini-pen" data-rw-open="pub" aria-label="公開する記事も書く" title="公開する記事も書く">${IC.edit}<small>公開用</small></button>
+        </div>
+        <div class="myrec-pub">${s.pub ? `${IC.globe}<span>公開する記事「${esc(s.pub.title || "タイトルなし")}」・${s.pub.recId && recById[s.pub.recId] ? `公開中（${visLabel(s.pub.vis)}）` : "下書き"}</span>` : `<span>右の小さな書くボタンを押すと、同じ画面の下に、みんなに見せる記事も書けます</span>`}</div>
         <div class="mm-acts"><button class="mini-btn" data-del-spot>この場所を記録から外す</button><button class="mini-btn danger" data-del-rec>記録ごと消す</button></div>
       </div>`;
     }
@@ -2081,6 +2246,7 @@
       if (d.openRec) { openArticle(d.openRec); return; }
       if ("edit" in d) { setEdit(true); return; }
       if (!t) return;
+      if (d.rwOpen && t.kind === "mine") { openRecWindow(t.r, t.s, d.rwOpen, () => { renderBody(); pins(); }); return; }
       if (d.rate) { t.s.rating = Number(d.rate); renderBody(); pins(); }
       else if (d.vis) { t.s.vis = d.vis; renderBody(); pins(); toast(`公開範囲を「${visLabel(d.vis)}」にしました`); }
       else if (d.delPhoto != null) { photosOf(t).splice(Number(d.delPhoto), 1); renderBody(); pins(); toast("写真を外しました"); }
@@ -2116,196 +2282,1218 @@
     });
   }
 
-  /* ---------- 書く（真ん中の緑の丸）：note の記事の編集画面を参考にした、記事を書く画面 ----------
-     見出し画像・タイトル・本文（見出し・引用・太字・区切り線・画像）に、Take A Map らしく「行った場所」のカードを入れられる。
-     試作なので公開はしない。書いた中身はこの端末のメモリにだけ置き（どこにも送らない）、閉じても残るが、開き直すと消える */
-  const wr = { title: "", body: "", cover: null, tag: null, savedAt: null };
+  /* ---------- 記事の中身（ブロック） ----------
+     書く画面・自分の記録で書いた本文を、読む画面で出すための形にする（貼り付けは文字だけなので、中身はこのアプリで作ったものだけ）。
+     { t: "p" | "h" | "q", h：太字・リンク・改行だけ残した文字 } / { t: "ul", items } / { t: "hr" } /
+     { t: "img", src, cap } / { t: "gal", items: [{ src, cap }] } / { t: "spot", id, rating, info } */
   const WR_EMPTY = "<p><br></p>";
   // 本文の文字（数えるため）。DOMParser は画像を読み込まず、スクリプトも動かさない
   const htmlText = (html) => new DOMParser().parseFromString(html || "", "text/html").body.textContent;
-  const wrCount = (bodyText) => (wr.title + bodyText).replace(/\s/g, "").length;
-  function spotBlock(sp, rating = 0) {
-    return `<div class="wr-spot" contenteditable="false" data-spot="${sp.id}">
-      <div class="wr-spot-top"><span class="wr-spot-ic">${IC.pin}</span><span class="wr-spot-tx"><b>${esc(sp.name)}</b><small>${esc(sp.kind)}${hoursText(sp) ? "・" + esc(hoursText(sp)) : ""}</small></span></div>
-      <div class="wr-rate">${[3, 2, 1].map((n) => `<button class="r${n} ${n === rating ? "on" : ""}" data-wr-rate="${n}">${RATING[n]}</button>`).join("")}</div>
-      <button class="wr-x" data-wr-del aria-label="この場所を外す">${IC.x}</button>
+  const safeHref = (u) => (/^https?:\/\/[^\s"'<>]+$/i.test(u || "") ? u : "");
+  // 文字の中の飾りは、太字・リンク・改行だけ残す（ほかのタグは中の文字だけにする）
+  function inlineHTML(node) {
+    let out = "";
+    node.childNodes.forEach((n) => {
+      if (n.nodeType === 3) { out += esc(n.nodeValue); return; }
+      if (n.nodeType !== 1) return;
+      const tag = n.tagName, inner = inlineHTML(n);
+      if (tag === "BR") out += "<br>";
+      else if (tag === "B" || tag === "STRONG" || (tag === "SPAN" && /bold|[6-9]00/.test(n.style.fontWeight))) out += inner ? `<b>${inner}</b>` : "";
+      else if (tag === "A" && safeHref(n.getAttribute("href"))) out += `<a href="${esc(n.getAttribute("href"))}" target="_blank" rel="noopener">${inner}</a>`;
+      else out += inner;
+    });
+    return out;
+  }
+  const trimInline = (h) => h.replace(/^(\s|<br>)+|(\s|<br>)+$/g, "");
+  const parseInfo = (s) => { try { return JSON.parse(s || "{}") || {}; } catch (e) { return {}; } };
+  const capOf = (f) => { const c = f.querySelector("figcaption"); return c ? c.textContent.trim() : ""; };
+  function readBlocks(root) {
+    const out = [];
+    root.childNodes.forEach((el) => {
+      if (el.nodeType === 3) { const t = el.nodeValue.trim(); if (t) out.push({ t: "p", h: esc(t) }); return; }
+      if (el.nodeType !== 1) return;
+      const cls = el.classList, tag = el.tagName;
+      if (cls.contains("wr-fig")) { const im = el.querySelector("img"); if (im) out.push({ t: "img", src: im.getAttribute("src"), cap: capOf(el) }); return; }
+      if (cls.contains("wr-gal")) {
+        const items = [...el.querySelectorAll("figure")].map((f) => ({ src: f.querySelector("img").getAttribute("src"), cap: capOf(f) }));
+        if (items.length) out.push({ t: "gal", items });
+        return;
+      }
+      if (cls.contains("wr-spot")) { out.push({ t: "spot", id: el.dataset.spot, rating: Number(el.dataset.rating) || 0, info: parseInfo(el.dataset.info) }); return; }
+      if (tag === "HR") { out.push({ t: "hr" }); return; }
+      if (tag === "UL" || tag === "OL") {
+        const items = [...el.querySelectorAll("li")].map((li) => trimInline(inlineHTML(li))).filter(Boolean);
+        if (items.length) out.push({ t: "ul", items });
+        return;
+      }
+      const h = trimInline(inlineHTML(el));
+      if (h) out.push({ t: /^H[1-6]$/.test(tag) ? "h" : tag === "BLOCKQUOTE" ? "q" : "p", h });
+    });
+    return out;
+  }
+  // 保存してある本文（書く画面の HTML）を読む形に
+  const blocksOf = (html) => readBlocks(new DOMParser().parseFromString(`<div>${html || ""}</div>`, "text/html").body.firstChild);
+  const plainOf = (blocks) => blocks.map((b) => (b.t === "ul" ? b.items.join(" ") : b.h || "")).map(htmlText).join(" ").replace(/\s+/g, " ").trim();
+  const photosOfBlocks = (blocks) => blocks.flatMap((b) => (b.t === "img" ? [{ src: b.src, cap: b.cap }] : b.t === "gal" ? b.items : []));
+  // 自分の記録の本文（前の版の「ひとこと」だけのものは、1段落の本文にする）
+  const mineHTML = (s) => (s.mine != null ? s.mine : s.note ? `<p>${esc(s.note)}</p>` : "");
+
+  // 写真（読む画面）。1枚なら大きく、2枚からは横にずらす列。押すと大きく見る
+  function galleryHTML(items) {
+    const fig = (it, small) => `<figure><img src="${esc(img(it.src, small))}" alt="${esc(it.cap || "")}" loading="lazy" data-zoom="${esc(img(it.src))}" data-cap="${esc(it.cap || "")}">${it.cap ? `<figcaption>${esc(it.cap)}</figcaption>` : ""}</figure>`;
+    if (items.length === 1) return `<div class="gallery">${fig(items[0], false)}</div>`;
+    return `<div class="gallery many">${items.map((it) => fig(it, true)).join("")}</div><div class="gallery-hint">${items.length}枚・横にずらすと次の写真</div>`;
+  }
+  // 本文を、書いた順に読む形で出す（h・items の中身は inlineHTML で作った、飾りだけ残した文字）
+  function flowHTML(list) {
+    return list.map((b) => {
+      switch (b.t) {
+        case "p": return `<p>${b.h}</p>`;
+        case "h": return `<h3 class="ab-h">${b.h}</h3>`;
+        case "q": return `<blockquote class="ab-q">${b.h}</blockquote>`;
+        case "ul": return `<ul class="ab-ul">${b.items.map((x) => `<li>${x}</li>`).join("")}</ul>`;
+        case "hr": return '<hr class="ab-hr">';
+        case "img": return galleryHTML([b]);
+        case "gal": return galleryHTML(b.items);
+        case "spot": { const sp = spotById[b.id]; return sp ? `<div class="ab-spot">${IC.pin}<b>${esc(sp.name)}</b>${b.rating ? ratingTag(b.rating) : ""}</div>` : ""; }
+        default: return "";
+      }
+    }).join("");
+  }
+
+  /* ---------- 場所の情報（記事を書くときに、押して選ぶか、文字で入れる） ----------
+     info：{ hrs: [{ d: 曜日（0=月〜6=日、7=祝）, o: 開く, c: 閉まる }], hoursX: 文字で書いた営業時間, off: 休みの曜日, closedX: 文字で書いた休み,
+             io: 屋内／屋外／屋内・屋外, stay: いた時間（分）, price: 1人の目安（円）, priceText, addr }
+     記事の場所の下に出て、まだ記事のない場所は、公開したときにこの値で登録される（予定をつくるときの営業時間・予算にも使う） */
+  const DAYS = ["月", "火", "水", "木", "金", "土", "日", "祝"];
+  // [0,1,2,3,4] → 「月〜金」、[5,6,7] → 「土・日・祝」
+  function daysText(list) {
+    const d = [...new Set(list)].sort((a, b) => a - b), wk = d.filter((x) => x < 7), parts = [];
+    if (wk.length === 7) parts.push("毎日");
+    else for (let i = 0; i < wk.length;) {
+      let j = i;
+      while (j + 1 < wk.length && wk[j + 1] === wk[j] + 1) j++;
+      if (j - i >= 2) parts.push(`${DAYS[wk[i]]}〜${DAYS[wk[j]]}`); else for (let k = i; k <= j; k++) parts.push(DAYS[wk[k]]);
+      i = j + 1;
+    }
+    if (d.includes(7)) parts.push("祝");
+    return parts.join("・");
+  }
+  // 押して選んだ曜日・時刻と、文字で書いたものをつないで、記事に出す文にする
+  function infoTexts(info) {
+    const hm = (x) => x.replace(/^0(\d)/, "$1"); // 09:00 → 9:00
+    const rows = (info.hrs || []).filter((r) => r.d.length && r.o && r.c).map((r) => `${daysText(r.d)} ${hm(r.o)}〜${hm(r.c)}`);
+    const off = info.off || [], wk = off.filter((x) => x < 7);
+    const offT = [wk.length ? (wk.length === 7 ? "毎日" : daysText(wk) + "曜") : "", off.includes(7) ? "祝日" : ""].filter(Boolean).join("・");
+    return { hours: [...rows, info.hoursX].filter((x) => x && x.trim()).join("／"), closed: [offT, info.closedX].filter((x) => x && x.trim()).join("、") };
+  }
+  const IO_OPTS = ["屋内", "屋外", "屋内・屋外"];
+  const STAY_OPTS = [[30, "30分"], [60, "1時間"], [90, "1.5時間"], [120, "2時間"], [180, "3時間〜"]];
+  const PRICE_OPTS = [[0, "無料"], [500, "〜500円"], [1000, "〜1,000円"], [2000, "〜2,000円"], [3000, "〜3,000円"], [5000, "〜5,000円"], [8000, "5,000円〜"]];
+  const stayLabel = (m) => (STAY_OPTS.find(([v]) => v === m) || [0, stayText(m)])[1];
+  const priceLabel = (info) => info.priceText || (info.price === 0 ? "無料" : info.price != null ? `${info.price.toLocaleString()}円` : "");
+  const newPlace = (sp) => !!(sp.temp || sp.user || !sp.id); // まだ記事のない場所（屋内か屋外かなど、わからないことが多い）
+  // 場所にもう入っている値から始める（書き手が入れた値・地図で探したときの住所）
+  function infoFrom(sp) {
+    return {
+      hrs: [{ d: [], o: "10:00", c: "18:00" }],
+      hoursX: sp.hoursText || (sp.hours ? `${sp.hours.open}〜${sp.hours.close}` : ""),
+      off: [], closedX: sp.closed || "",
+      io: sp.io || (newPlace(sp) ? "" : sp.indoor ? "屋内" : "屋外"),
+      stay: sp.stay || null, price: sp.price == null ? null : sp.price, priceText: sp.priceText || "", addr: sp.addr || "",
+    };
+  }
+  const dayBtns = (on, attr) => `<div class="pi-days">${DAYS.map((d, i) => `<button type="button" class="${on.includes(i) ? "on" : ""} ${i > 4 ? "we" : ""}" ${attr}="${i}">${d}</button>`).join("")}</div>`;
+  const piChips = (opts, cur, attr) => `<div class="pi-chips">${opts.map(([v, l]) => `<button type="button" class="${cur === v ? "on" : ""}" ${attr}="${esc(v)}">${esc(l)}</button>`).join("")}</div>`;
+  const PI_PH = { hours: "記事には「営業」として出ます", closed: "記事には「休み」として出ます" };
+  function infoFormInner(info) {
+    const t = infoTexts(info), chip = PRICE_OPTS.some(([, l]) => l === info.priceText);
+    return `<div class="pi-sec">
+        <div class="pi-k">${IC.clock}営業時間<small>曜日を押して、時刻を選ぶ</small></div>
+        ${info.hrs.map((r, k) => `<div class="pi-hrow" data-hrow="${k}">${dayBtns(r.d, "data-pi-day")}
+          <div class="pi-times"><input type="time" step="900" value="${esc(r.o)}" data-pi-o aria-label="開く時刻"><span>〜</span><input type="time" step="900" value="${esc(r.c)}" data-pi-c aria-label="閉まる時刻">${k ? `<button type="button" class="pi-rowx" data-pi-rowx aria-label="この行を消す">${IC.x}</button>` : ""}</div></div>`).join("")}
+        ${info.hrs.length < 4 ? `<button type="button" class="pi-add" data-pi-addrow>${IC.plus}曜日ごとに時間を変える</button>` : ""}
+        <label class="pi-line"><span>文字で</span><input data-pi-t="hoursX" value="${esc(info.hoursX || "")}" placeholder="例：ラストオーダー 21:30／夏は19時まで"></label>
+        <div class="pi-out ${t.hours ? "" : "empty"}" data-pi-out="hours">${esc(t.hours || PI_PH.hours)}</div>
+      </div>
+      <div class="pi-sec">
+        <div class="pi-k">${IC.closed}定休日<small>休みの曜日を押す</small></div>
+        ${dayBtns(info.off || [], "data-pi-off")}
+        <label class="pi-line"><span>文字で</span><input data-pi-t="closedX" value="${esc(info.closedX || "")}" placeholder="例：第3水曜、年末年始"></label>
+        <div class="pi-out ${t.closed ? "" : "empty"}" data-pi-out="closed">${esc(t.closed || PI_PH.closed)}</div>
+      </div>
+      <div class="pi-sec"><div class="pi-k">${IC.home}屋内・屋外</div>${piChips(IO_OPTS.map((x) => [x, x]), info.io, "data-pi-io")}</div>
+      <div class="pi-sec"><div class="pi-k">${IC.clock}いた時間</div>${piChips(STAY_OPTS, info.stay, "data-pi-stay")}</div>
+      <div class="pi-sec"><div class="pi-k">${IC.yen}かかったお金<small>1人分</small></div>${piChips(PRICE_OPTS.map(([, l]) => [l, l]), info.priceText, "data-pi-price")}
+        <label class="pi-line"><span>ちょうど</span><input type="number" inputmode="numeric" min="0" step="10" data-pi-yen value="${!chip && info.price != null ? info.price : ""}" placeholder="例：1200"><span>円</span></label></div>
+      <div class="pi-sec"><div class="pi-k">${IC.pin}住所</div><input class="field" data-pi-t="addr" value="${esc(info.addr || "")}" placeholder="住所（わかれば）"></div>`;
+  }
+  // 場所の情報の入力欄を動かす（info をそのまま直す）
+  function bindInfoForm(el, info, onChange) {
+    const out = () => {
+      const t = infoTexts(info);
+      ["hours", "closed"].forEach((k) => { const o = $(`[data-pi-out="${k}"]`, el); if (o) { o.textContent = t[k] || PI_PH[k]; o.classList.toggle("empty", !t[k]); } });
+      if (onChange) onChange(info);
+    };
+    const redraw = () => { el.innerHTML = infoFormInner(info); out(); };
+    const pick = (b, on) => $$("button", b.parentNode).forEach((x) => x.classList.toggle("on", on && x === b));
+    const tog = (list, v) => { const i = list.indexOf(v); if (i >= 0) list.splice(i, 1); else list.push(v); };
+    el.addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b || !el.contains(b)) return;
+      const d = b.dataset, row = b.closest("[data-hrow]"), r = row && info.hrs[Number(row.dataset.hrow)];
+      if (d.piDay != null && r) { tog(r.d, Number(d.piDay)); b.classList.toggle("on"); }
+      else if (d.piOff != null) { info.off = info.off || []; tog(info.off, Number(d.piOff)); b.classList.toggle("on"); }
+      else if ("piAddrow" in d) { info.hrs.push({ d: [], o: info.hrs[0] ? info.hrs[0].o : "10:00", c: info.hrs[0] ? info.hrs[0].c : "18:00" }); redraw(); return; }
+      else if ("piRowx" in d && row) { info.hrs.splice(Number(row.dataset.hrow), 1); redraw(); return; }
+      else if (d.piIo != null) { info.io = info.io === d.piIo ? "" : d.piIo; pick(b, !!info.io); }
+      else if (d.piStay != null) { const v = Number(d.piStay); info.stay = info.stay === v ? null : v; pick(b, info.stay != null); }
+      else if (d.piPrice != null) {
+        const o = PRICE_OPTS.find(([, l]) => l === d.piPrice);
+        if (info.priceText === d.piPrice) { info.priceText = ""; info.price = null; } else { info.priceText = o[1]; info.price = o[0]; }
+        pick(b, !!info.priceText);
+        const y = $("[data-pi-yen]", el); if (y) y.value = "";
+      } else return;
+      out();
+    });
+    const onInput = (e) => {
+      const t = e.target, d = t.dataset;
+      if (d.piT) info[d.piT] = t.value;
+      else if ("piO" in d || "piC" in d) { const row = t.closest("[data-hrow]"), r = row && info.hrs[Number(row.dataset.hrow)]; if (r && t.value) r["piO" in d ? "o" : "c"] = t.value; }
+      else if ("piYen" in d) {
+        const n = parseInt(t.value, 10);
+        info.price = Number.isFinite(n) && n >= 0 ? n : null;
+        info.priceText = info.price != null ? `${info.price.toLocaleString()}円` : "";
+        $$("[data-pi-price]", el).forEach((x) => x.classList.remove("on"));
+      } else return;
+      out();
+    };
+    el.addEventListener("input", onInput);
+    el.addEventListener("change", onInput); // 時刻の欄は change しか来ないブラウザがある
+  }
+  // 記事・自分の記録で出す場所の情報（記事に入れた値。なければ場所にもう入っている値）
+  function infoView(info, sp) {
+    const t = infoTexts(info);
+    return {
+      hours: t.hours || hoursText(sp), closed: t.closed || sp.closed || "", addr: info.addr || sp.addr || "",
+      io: info.io || (newPlace(sp) ? "" : ioText(sp)), stay: info.stay ? stayLabel(info.stay) : "",
+      price: priceLabel(info) || sp.priceText || (sp.price ? `目安 ${sp.price.toLocaleString()}円` : ""),
+    };
+  }
+  function infoBoxHTML(v) {
+    const kv = [v.io, v.price, v.stay ? "滞在 " + v.stay : ""].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join("");
+    const dl = [["営業", v.hours], ["休み", v.closed], ["住所", v.addr]].filter(([, x]) => x).map(([k, x]) => `<div><dt>${k}</dt><dd>${esc(x)}</dd></div>`).join("");
+    return `${kv ? `<div class="kv">${kv}</div>` : ""}${dl ? `<dl class="stop-info">${dl}</dl>` : ""}`;
+  }
+  // 書く画面の場所のカードに出す、うすい枠（まだ入れていない所は「押して入れる」）
+  function infoSummary(info) {
+    const t = infoTexts(info);
+    const row = (k, v) => `<span class="ws-row"><i>${k}：</i><span class="${v ? "" : "ph"}">${esc(v || "押して入れる")}</span></span>`;
+    return `${row("営業時間", t.hours)}${row("定休日", t.closed)}${row("屋内・屋外", info.io)}${row("いた時間", info.stay ? stayLabel(info.stay) : "")}${row("費用", priceLabel(info))}${row("住所", info.addr)}`;
+  }
+  // 公開した記事の値を場所に入れる。まだ記事のなかった場所は、記事の値でそのまま登録する。もともとある場所は、空いている所だけ埋める
+  function applyInfo(sp, info) {
+    const t = infoTexts(info), fresh = newPlace(sp);
+    const set = (k, v) => { if (v !== "" && v != null && (fresh || sp[k] == null || sp[k] === "")) sp[k] = v; };
+    set("hoursText", t.hours); set("closed", t.closed); set("addr", info.addr); set("priceText", info.priceText);
+    if (info.price != null) set("price", info.price);
+    if (info.io) { set("io", info.io); if (fresh) sp.indoor = info.io !== "屋外"; }
+    if (info.stay) set("stay", info.stay);
+    const rows = (info.hrs || []).filter((r) => r.d.length && r.o && r.c);
+    if (rows.length && (fresh || !sp.hours)) sp.hours = { open: rows.map((r) => r.o).sort()[0], close: rows.map((r) => r.c).sort().slice(-1)[0] };
+  }
+  // 場所の情報を入れる小さな画面（書く画面の場所のカードから）
+  function openInfoSheet(sp, info, onSave) {
+    closePicker();
+    const work = JSON.parse(JSON.stringify(info));
+    if (!work.hrs || !work.hrs.length) work.hrs = [{ d: [], o: "10:00", c: "18:00" }];
+    const box = document.createElement("div");
+    box.className = "picker-back"; box.id = "picker";
+    box.innerHTML = `<div class="picker pi-sheet" role="dialog" aria-label="場所の情報">
+      <div class="picker-head">${IC.pin}<div><b>${esc(sp ? sp.name : "場所")}の情報</b><div class="small">わかるところだけ。記事の場所の下に出て、予定をつくるときにも使われます</div></div></div>
+      <div class="picker-list"><div class="pi" data-pi>${infoFormInner(work)}</div></div>
+      <div class="picker-foot"><button class="mini-btn" data-pk="close">やめる</button><button class="btn primary small" data-pk="ok">${IC.check}入れる</button></div>
+    </div>`;
+    $("#app").appendChild(box);
+    requestAnimationFrame(() => box.classList.add("show"));
+    bindInfoForm($("[data-pi]", box), work);
+    box.addEventListener("click", (e) => {
+      const k = e.target.closest("[data-pk]");
+      if (k && k.dataset.pk === "ok") { closePicker(); onSave(work); toast("場所の情報を入れました"); }
+      else if ((k && k.dataset.pk === "close") || e.target === box) closePicker();
+    });
+  }
+
+  /* ---------- note 風の本文エディタ（書く画面と、自分の記録で同じものを使う） ----------
+     ・カーソルのある所に入れる。文の途中なら、そこで段落を2つに分けて、そのあいだに入れる
+     ・空の行の右に「＋」が出る。押すと、入れられるもののメニュー（note の「＋」と同じ使い方）
+     ・画像・写真の列・場所のカードは、↑↓で動かし、×で外す。写真の列は横にずらして見る
+     ・貼り付けは文字だけ（ほかのページの見た目やスクリプトを持ち込まない）。中身はこの端末のメモリだけ */
+  const RT = {
+    img: [IC.image, "画像"], gal: [IC.images, "写真を並べる"], recph: [IC.images, "記録の写真"], spot: [IC.pin, "場所"],
+    h: ['<b class="wt-t">H</b>', "見出し"], quote: [IC.quote, "引用"], ul: [IC.list, "箇条書き"],
+    bold: ['<b class="wt-t">B</b>', "太字"], link: [IC.link, "リンク"], hr: [IC.hr, "区切り線"],
+  };
+  const rtBtn = (k) => `<button type="button" data-rt="${k}" title="${RT[k][1]}">${RT[k][0]}<span>${RT[k][1]}</span></button>`;
+  const BLK_TOOLS = `<span class="blk-tools"><button type="button" data-bt="up" aria-label="上へ">${IC.up}</button><button type="button" data-bt="down" aria-label="下へ">${IC.down}</button><button type="button" data-bt="del" aria-label="外す">${IC.x}</button></span>`;
+  const figHTML = (src, cap = "") => `<figure class="wr-fig" contenteditable="false"><img src="${esc(src)}" alt=""><figcaption contenteditable="true" data-ph="キャプション（なくてもよい）">${esc(cap)}</figcaption>${BLK_TOOLS}</figure>`;
+  const galItem = (it) => `<figure><img src="${esc(it.src)}" alt=""><figcaption contenteditable="true" data-ph="説明">${esc(it.cap || "")}</figcaption><button type="button" class="wr-gal-x" data-gal-del aria-label="この写真を外す">${IC.x}</button></figure>`;
+  const galHTML = (items) => `<div class="wr-gal" contenteditable="false"><div class="wr-gal-row">${items.map(galItem).join("")}<label class="wr-gal-add">${IC.plus}<span>足す</span><input type="file" accept="image/*" multiple hidden data-gal-add></label></div><div class="wr-gal-foot"><span class="wr-gal-note" data-gal-n>${items.length}枚・横にずらして見る</span>${BLK_TOOLS}</div></div>`;
+  const photoBlock = (list) => (list.length > 1 ? galHTML(list.map((src) => ({ src }))) : figHTML(list[0]));
+  // 本文に入れる「行った場所」のカード。評価と、場所の情報（営業時間・定休日など）のうすい枠つき
+  function spotBlock(sp, rating = 0, info = null) {
+    const inf = info || infoFrom(sp);
+    return `<div class="wr-spot" contenteditable="false" data-spot="${sp.id}" data-rating="${rating}" data-info="${esc(JSON.stringify(inf))}">
+      <div class="wr-spot-top"><span class="wr-spot-ic">${IC.pin}</span><span class="wr-spot-tx"><b>${esc(sp.name)}</b><small>${esc(sp.kind)}${sp.temp ? "・まだ記事のない場所" : ""}</small></span></div>
+      <div class="wr-rate">${[3, 2, 1].map((n) => `<button type="button" class="r${n} ${n === rating ? "on" : ""}" data-wr-rate="${n}">${RATING[n]}</button>`).join("")}</div>
+      <button type="button" class="wr-info" data-wr-info>${infoSummary(inf)}</button>
+      ${BLK_TOOLS}
     </div>`;
   }
-  // fromPlan：たどった予定の場所を、本文に入れてから開く（たどり終わったときの「記事を書く」）
+  /* wrap にエディタを作る。o：{ html, tools, ph, label, onChange(html), recPhotos()（記録の写真）, toolsHost（道具の帯を置く所）,
+     bar: false（道具の帯を作らない。書く画面は、上の帯をいま書いている本文に使う）, onFocus(エディタ) } */
+  function mountEditor(wrap, o) {
+    const btn = rtBtn;
+    const bar = o.bar === false ? "" : `<div class="rt-tools" role="toolbar" aria-label="本文に入れる">${o.tools.map(btn).join("")}</div>`;
+    wrap.innerHTML = `${o.toolsHost ? "" : bar}<div class="rt-area">
+        <div class="wr-body rt" contenteditable="true" role="textbox" aria-multiline="true" aria-label="${esc(o.label || "本文")}" data-ph="${esc(o.ph || "")}">${o.html || WR_EMPTY}</div>
+        <button type="button" class="rt-plus" hidden aria-label="画像などを入れる">${IC.plus}</button>
+        <div class="rt-menu" hidden>${o.tools.filter((k) => k !== "bold" && k !== "link").map(btn).join("")}</div>
+      </div>
+      <input type="file" accept="image/*" hidden data-rt-file><input type="file" accept="image/*" multiple hidden data-rt-files>`;
+    if (o.toolsHost) o.toolsHost.innerHTML = bar;
+    const toolsEl = o.bar === false ? null : $(".rt-tools", o.toolsHost || wrap), area = $(".rt-area", wrap), rt = $(".rt", wrap), plus = $(".rt-plus", wrap), menu = $(".rt-menu", wrap);
+    try { document.execCommand("defaultParagraphSeparator", false, "p"); } catch (err) { /* なくてもよい */ }
+    const isBlank = (el) => !el.textContent.trim() && !el.querySelector("img");
+    const isText = (el) => !!el && el.nodeType === 1 && /^(P|H2|H3|BLOCKQUOTE|DIV)$/.test(el.tagName) && !el.classList.contains("wr-spot") && !el.classList.contains("wr-gal");
+    const isEmpty = () => !rt.textContent.trim() && !rt.querySelector("img,hr,.wr-spot,ul,h2,h3,blockquote");
+    const newP = () => { const p = document.createElement("p"); p.innerHTML = "<br>"; return p; };
+    const changed = () => {
+      if (!rt.firstElementChild && !rt.textContent.trim()) rt.innerHTML = WR_EMPTY; // 全部消したときも段落を残す
+      const last = rt.lastElementChild;
+      if (last && !isText(last)) last.after(newP()); // 最後は、書き続けられる段落にしておく
+      rt.classList.toggle("is-empty", isEmpty());
+      if (o.onChange) o.onChange(rt.innerHTML);
+    };
+    // 本文のカーソルの位置を覚えておく（道具のボタンを押しても、その位置に入れる）
+    let range = null;
+    const blockOf = (n) => { while (n && n.parentNode !== rt) n = n.parentNode; return n || null; };
+    const placeAt = (el, end) => {
+      const r = document.createRange(); r.selectNodeContents(el); r.collapse(!end);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r); range = r.cloneRange();
+    };
+    // 空の行にカーソルがあるときだけ、その行の右に「＋」を出す
+    function updatePlus() {
+      const s = getSelection();
+      const blk = s.rangeCount && s.isCollapsed && rt.contains(s.anchorNode) ? blockOf(s.anchorNode) : null;
+      const show = !!blk && blk.tagName === "P" && isBlank(blk);
+      plus.hidden = !show;
+      if (!show) { menu.hidden = true; return; }
+      const top = blk.getBoundingClientRect().top - area.getBoundingClientRect().top;
+      plus.style.top = Math.max(0, top + (blk.offsetHeight - 30) / 2) + "px";
+      menu.style.top = Math.max(0, top + blk.offsetHeight / 2 + 20) + "px";
+    }
+    const onSel = () => {
+      if (!rt.isConnected) { document.removeEventListener("selectionchange", onSel); return; } // 閉じたら外す
+      const s = getSelection();
+      if (s.rangeCount && rt.contains(s.anchorNode)) { range = s.getRangeAt(0).cloneRange(); updatePlus(); }
+    };
+    document.addEventListener("selectionchange", onSel);
+    const restore = () => {
+      rt.focus({ preventScroll: true });
+      if (range && rt.contains(range.startContainer)) { const s = getSelection(); s.removeAllRanges(); s.addRange(range); }
+      else placeAt(rt.lastElementChild || rt, true);
+    };
+    // カーソルの所にブロック（画像・写真の列・場所・区切り線）を入れ、そのあとに書き続けられる段落を置く
+    function insertBlock(html) {
+      const tpl = document.createElement("template"); tpl.innerHTML = html.trim();
+      const nodes = [...tpl.content.children], after = newP();
+      if (!nodes.length) return;
+      let next = after;
+      const r = range && rt.contains(range.startContainer) ? range : null;
+      const blk = r ? blockOf(r.startContainer) : null;
+      if (blk && isText(blk)) {
+        if (isBlank(blk)) blk.replaceWith(...nodes, after);
+        else {
+          // 文の途中：カーソルの所で段落を2つに分け、そのあいだに入れる
+          const tail = document.createRange();
+          tail.setStart(r.startContainer, r.startOffset); tail.setEnd(blk, blk.childNodes.length);
+          const rest = document.createElement(/^H/.test(blk.tagName) ? "p" : blk.tagName.toLowerCase());
+          rest.appendChild(tail.extractContents());
+          if (isBlank(rest)) blk.after(...nodes, after);
+          else { blk.after(...nodes, rest); next = rest; }
+          if (isBlank(blk)) blk.remove();
+        }
+      } else if (blk) blk.after(...nodes, after);
+      else rt.append(...nodes, after);
+      rt.focus({ preventScroll: true }); placeAt(next, false);
+      nodes[0].scrollIntoView({ block: "nearest" });
+      changed(); updatePlus();
+    }
+    const galCount = (g) => {
+      const n = $$("figure", g).length;
+      if (!n) { g.remove(); return; }
+      const t = $("[data-gal-n]", g); if (t) t.textContent = `${n}枚・横にずらして見る`;
+    };
+    rt.addEventListener("click", (e) => {
+      menu.hidden = true;
+      const bt = e.target.closest("[data-bt]");
+      if (bt) {
+        const b = blockOf(bt), k = bt.dataset.bt;
+        if (k === "del") b.remove();
+        else if (k === "up" && b.previousElementSibling) b.previousElementSibling.before(b);
+        else if (k === "down" && b.nextElementSibling) b.nextElementSibling.after(b);
+        changed();
+        if (k !== "del") b.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        return;
+      }
+      const gx = e.target.closest("[data-gal-del]");
+      if (gx) { const g = gx.closest(".wr-gal"); gx.closest("figure").remove(); galCount(g); changed(); return; }
+      const rate = e.target.closest("[data-wr-rate]");
+      if (rate) {
+        const c = rate.closest(".wr-spot"); c.dataset.rating = rate.dataset.wrRate;
+        $$("[data-wr-rate]", c).forEach((x) => x.classList.toggle("on", x === rate)); changed(); return;
+      }
+      const inf = e.target.closest("[data-wr-info]");
+      if (inf) {
+        const c = inf.closest(".wr-spot");
+        openInfoSheet(spotById[c.dataset.spot], parseInfo(c.dataset.info), (info) => { c.dataset.info = JSON.stringify(info); inf.innerHTML = infoSummary(info); changed(); });
+      }
+    });
+    // 写真の列に写真を足す
+    rt.addEventListener("change", async (e) => {
+      const inp = e.target.closest("[data-gal-add]"); if (!inp) return;
+      const files = [...(inp.files || [])]; inp.value = "";
+      const g = inp.closest(".wr-gal"), add = inp.closest(".wr-gal-add");
+      for (const f of files) { try { add.insertAdjacentHTML("beforebegin", galItem({ src: await shrinkPhoto(f, 1600) })); } catch (err) { /* 読めない画像はとばす */ } }
+      galCount(g); changed();
+    });
+    rt.addEventListener("input", () => { changed(); updatePlus(); });
+    rt.addEventListener("keydown", (e) => {
+      // キャプションは1行
+      const n = getSelection().anchorNode, el = n && (n.nodeType === 1 ? n : n.parentNode);
+      if (e.key === "Enter" && el && el.closest && el.closest("figcaption")) e.preventDefault();
+    });
+    // 貼り付けは文字だけ（ほかのページの見た目やスクリプトを持ち込まない）
+    rt.addEventListener("paste", (e) => { e.preventDefault(); document.execCommand("insertText", false, (e.clipboardData || window.clipboardData).getData("text/plain")); });
+    rt.addEventListener("drop", (e) => e.preventDefault());
+    rt.addEventListener("focusout", () => setTimeout(() => { if (!rt.contains(document.activeElement) && menu.hidden) plus.hidden = true; }, 250));
+
+    const file1 = $("[data-rt-file]", wrap), fileN = $("[data-rt-files]", wrap);
+    async function addFiles(list, many) {
+      const srcs = [];
+      for (const f of list) { try { srcs.push(await shrinkPhoto(f, 1600)); } catch (err) { /* 読めない画像はとばす */ } }
+      if (!srcs.length) { toast("画像を読めませんでした"); return; }
+      insertBlock(many && srcs.length > 1 ? galHTML(srcs.map((src) => ({ src }))) : srcs.map((x) => figHTML(x)).join(""));
+      toast(`写真を${srcs.length}枚入れました（位置情報は消してあります）`);
+    }
+    file1.addEventListener("change", (e) => { const l = [...(e.target.files || [])]; e.target.value = ""; if (l.length) addFiles(l, false); });
+    fileN.addEventListener("change", (e) => { const l = [...(e.target.files || [])]; e.target.value = ""; if (l.length) addFiles(l, true); });
+    function act(k) {
+      menu.hidden = true;
+      if (k === "img") { file1.click(); return; }
+      if (k === "gal") { fileN.click(); return; }
+      if (k === "recph") {
+        const l = o.recPhotos ? o.recPhotos() : [];
+        if (!l.length) { toast("記録の写真がまだありません（「写真」で足せます）"); return; }
+        insertBlock(photoBlock(l)); return;
+      }
+      if (k === "spot") { openSpotPicker((list) => insertBlock(list.map((sp) => spotBlock(sp)).join(WR_EMPTY))); return; }
+      if (k === "hr") { insertBlock("<hr>"); return; }
+      restore();
+      if (k === "bold") { document.execCommand("bold"); changed(); return; }
+      if (k === "ul") { document.execCommand("insertUnorderedList"); changed(); return; }
+      if (k === "link") {
+        const s = getSelection();
+        if (!s.rangeCount || s.isCollapsed) { toast("リンクにしたい文字を選んでから押してください"); return; }
+        const keep = s.getRangeAt(0).cloneRange();
+        const u = (prompt("リンクのアドレス（https:// から）", "https://") || "").trim();
+        if (!safeHref(u)) { if (u && u !== "https://") toast("https:// か http:// から始まるアドレスを入れてください"); return; }
+        rt.focus({ preventScroll: true }); s.removeAllRanges(); s.addRange(keep);
+        document.execCommand("createLink", false, u); changed(); return;
+      }
+      const blk = range && blockOf(range.startContainer);
+      if (!isText(blk)) { toast("文字の段落にカーソルを置いてから押してください"); return; }
+      const tag = k === "h" ? "H2" : "BLOCKQUOTE";
+      document.execCommand("formatBlock", false, blk.tagName === tag ? "<p>" : `<${tag.toLowerCase()}>`);
+      changed();
+    }
+    [toolsEl, menu, plus].filter(Boolean).forEach((el) => el.addEventListener("mousedown", (e) => e.preventDefault())); // 押しても本文のカーソルが消えないように
+    if (toolsEl) toolsEl.addEventListener("click", (e) => { const b = e.target.closest("[data-rt]"); if (b) act(b.dataset.rt); });
+    menu.addEventListener("click", (e) => { const b = e.target.closest("[data-rt]"); if (b) act(b.dataset.rt); });
+    plus.addEventListener("click", () => { menu.hidden = !menu.hidden; });
+    changed();
+    const api = {
+      rt, act, insert: insertBlock, isEmpty, blocks: () => readBlocks(rt),
+      setHTML: (h) => { rt.innerHTML = h || WR_EMPTY; changed(); },
+    };
+    if (o.onFocus) rt.addEventListener("focusin", () => o.onFocus(api));
+    return api;
+  }
+
+  /* ---------- 記事を公開する（試作：この端末のメモリの中だけ） ----------
+     makeRecord：書いた中身から記事の形を作る（プレビューにも使う。まだどこにも入れない）
+       o：{ id, title, mode（one：1か所 / route：複数の場所）, tag（ルートのメインのタグ）, tags（1か所の記事のタグ）, cover（見出し画像）, vis, leadBlocks,
+            secs: [{ spot, rating, head（小見出し）, tags（その場所のタグ）, info（場所の情報）, blocks（本文） }] }
+     publishRecord：記事を「読む」と地図に出す。まだ記事のなかった場所は、ここで登録されて、ほかの人も地図で使えるようになる */
+  const todayText = () => { const d = new Date(), p2 = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; };
+  const recsAt = (id) => D.records.filter((r) => r.spots.some((s) => s.spot === id));
+  function makeRecord(o) {
+    const secs = (o.secs || []).filter((x) => spotById[x.spot]);
+    if (!secs.length) return null;
+    const route = o.mode === "route";
+    const spots = secs.map((x) => {
+      const sp = spotById[x.spot], info = x.info && Object.keys(x.info).length ? x.info : infoFrom(sp), blocks = x.blocks || [];
+      return {
+        spot: sp.id, rating: x.rating || 2, stay: info.stay || defaultStay(sp), head: x.head || "", tags: x.tags || [],
+        note: plainOf(blocks).slice(0, 60) || x.head || "（本文なし）", photos: photosOfBlocks(blocks), blocks, info,
+      };
+    });
+    const one = (o.tags || []).filter(Boolean);
+    const main = route ? o.tag || "旅行" : one[0] || "旅行";
+    // 記事のタグ：ルートはメインのタグ＋場所ごとのタグ（読むのタグにあるものだけ）。読むでは、ルートはメインのタグだけで出る
+    const tags = route ? [...new Set([main, ...spots.flatMap((s) => s.tags.filter((t) => D.TAGS.includes(t)))])] : one.length ? one : ["旅行"];
+    return {
+      id: o.id || "me" + Date.now().toString(36), writer: "me", type: spots.length > 1 ? "route" : "spot", title: o.title, mainTag: main, tags,
+      date: todayText(), start: "10:00", spots, went: 0, lead: "", leadBlocks: o.leadBlocks || [], cover: o.cover || null, vis: o.vis || "public", rich: true,
+    };
+  }
+  function publishRecord(r) {
+    if (!r) return null;
+    r.spots.forEach((s) => {
+      const sp = spotById[s.spot];
+      applyInfo(sp, s.info);
+      if (sp.temp) { sp.user = true; delete sp.temp; } // 登録された（ほかの人も地図で使える）
+      if (sp.user) sp.tags = [...new Set([...(sp.tags || []), ...(s.tags.length ? s.tags : r.tags).filter((t) => D.TAGS.includes(t))])];
+    });
+    const i = D.records.findIndex((x) => x.id === r.id);
+    if (i >= 0) { r.went = D.records[i].went || 0; D.records[i] = r; } else D.records.unshift(r);
+    recById[r.id] = r;
+    if (map) { drawMap(false); if (stage() === "explore") renderSheet(); }
+    return r;
+  }
+  function unpublish(id) {
+    const i = D.records.findIndex((x) => x.id === id);
+    if (i >= 0) D.records.splice(i, 1);
+    delete recById[id];
+    if (map) { drawMap(false); if (stage() === "explore") renderSheet(); }
+  }
+  // プレビュー：公開したときの記事の見え方（まだ公開していない。登録・つくるなどのボタンは出さない）
+  function openPreview(r) {
+    const old = $("#pv"); if (old) old.remove();
+    const box = document.createElement("div");
+    box.className = "pv-back"; box.id = "pv";
+    box.innerHTML = `<div class="pv-bar"><span class="pv-ttl">${IC.eye}<b>プレビュー</b><small>公開したときの見え方です（まだ公開していません）</small></span><button class="btn primary small" data-pv-close>${IC.edit}書く画面に戻る</button></div><div class="pv-page" id="pv-page"></div>`;
+    $("#app").appendChild(box);
+    let mm = null;
+    renderArticle($("#pv-page", box), null, { rec: r, preview: true, onMap: (x) => { mm = x; } });
+    requestAnimationFrame(() => box.classList.add("show"));
+    box.addEventListener("click", (e) => {
+      if (!e.target.closest("[data-pv-close]")) return;
+      box.remove();
+      if (mm) mm.then((m) => { if (m) m.remove(); });
+    });
+  }
+
+  /* ---------- 書く（真ん中の緑の丸）：note の記事の編集画面を参考にした、記事を書く画面 ----------
+     いちばん上で、記事の形を選ぶ。
+       1か所：見出し画像・タイトル・場所・評価・タグ・本文・場所の情報
+       複数の場所（ルート）：見出し画像・タイトル・メインのタグ・はじめに。そのあと場所ごとに、
+         場所・小見出し・評価・その場所のタグ（駅・自然・グルメ…）・本文・場所の情報。「他の場所も続けて書く」で次の場所を足す
+     場所の情報（営業時間・定休日・住所など）は本文に入れない。記事では、場所の「詳しく」から見る。
+     「プレビュー」で公開したときの見え方を確かめ、「公開に進む」で、この端末の中だけで記事として出す（開き直すと消える） */
+  const newSec = (id = null) => ({ spot: id, rating: 0, head: "", tags: [], info: id ? infoFrom(spotById[id]) : null, html: "" });
+  const wr = { mode: "one", title: "", cover: null, tags: [], tag: null, lead: "", secs: [newSec()], savedAt: null, recId: null };
+  const SPOT_TAGS = [...new Set(["駅", ...D.TAGS.filter((t) => t !== "旅行"), "買い物", "宿"])];
+  const WR_TOOLS = ["img", "gal", "h", "quote", "ul", "bold", "link", "hr"];
+  const htmlBlank = (h) => !htmlText(h || "").trim() && !/<img|<hr|wr-spot/.test(h || "");
+  const wrBlank = () => !wr.title.trim() && htmlBlank(wr.lead) && wr.secs.every((x) => !x.spot && htmlBlank(x.html));
+  // 場所を書く画面に入れる（空いている場所の欄から埋め、足りなければ後ろに足す）。2か所以上になったらルートにする
+  function addSecs(ids) {
+    const have = new Set(wr.secs.map((x) => x.spot).filter(Boolean));
+    const fresh = [...new Set(ids)].filter((id) => spotById[id] && !have.has(id));
+    fresh.forEach((id) => {
+      const empty = wr.secs.find((x) => !x.spot);
+      if (empty) { empty.spot = id; empty.info = infoFrom(spotById[id]); } else wr.secs.push(newSec(id));
+    });
+    const toRoute = wr.mode !== "route" && wr.secs.filter((x) => x.spot).length > 1;
+    if (toRoute) { wr.mode = "route"; if (!wr.tag) wr.tag = wr.tags[0] || null; }
+    return { n: fresh.length, toRoute };
+  }
+  // fromPlan：たどった予定の場所を、場所ごとに書けるようにしてから開く（たどり終わったときの「記事を書く」）
   function openWrite(fromPlan) {
     const pl = state.plan;
     if (fromPlan && pl) {
       const ids = pl.stops.filter(live).map((s) => s.spot);
-      const blank = !wr.title.trim() && !htmlText(wr.body).trim() && !/wr-spot|<img|<hr/.test(wr.body);
-      if (blank || confirm("書きかけの記事の最後に、たどった場所を足しますか？")) {
+      if (wrBlank() || confirm("書きかけの記事の後ろに、たどった場所を足しますか？")) {
         if (!wr.title.trim()) wr.title = pl.title;
-        wr.body = (blank ? "" : wr.body) + ids.map((id) => spotBlock(spotById[id]) + WR_EMPTY).join("");
-        toast(`たどった${ids.length}か所を本文に入れました`);
+        const a = addSecs(ids);
+        toast(a.n ? `たどった${a.n}か所を、場所ごとに書けるようにしました` : "たどった場所は、もう入っています");
       }
     }
     const render = (p) => renderWrite(p);
     render.coverTabs = true;
     showPanel(render);
   }
+  // 地図で見つけた場所から書く
+  function openWriteAt(sp) {
+    const a = addSecs([sp.id]);
+    toast(a.n ? `${sp.name}を入れました${a.toRoute ? "（複数の場所の記事にしました）" : ""}` : `${sp.name}は、もう入っています`);
+    openWrite(false);
+  }
+  let wrActive = null; // いま書いている本文。上の道具の帯は、ここに入れる
   function renderWrite(p) {
-    p.innerHTML = `<div class="wr">
+    const route = wr.mode === "route";
+    if (!wr.secs.length) wr.secs.push(newSec());
+    const tagBtns = (list, on, attr) => list.map((t) => `<button type="button" class="${on(t) ? "on" : ""}" ${attr}="${esc(t)}">#${esc(t)}</button>`).join("");
+    const secHTML = (x, k) => {
+      const sp = x.spot && spotById[x.spot], n = wr.secs.length;
+      const place = sp
+        ? `<button type="button" class="ws-place has" data-ws="place" data-k="${k}">${IC.pin}<span class="ws-place-tx"><b>${esc(sp.name)}</b><small>${esc(sp.kind)}${sp.temp ? "・まだ記事のない場所（公開すると登録されます）" : ""}</small></span><em>変える</em></button>`
+        : `<button type="button" class="ws-place" data-ws="place" data-k="${k}">${IC.pin}<span class="ws-place-tx"><b>${route ? `${k + 1}か所めの場所を選ぶ` : "行った場所を選ぶ"}</b><small>予定・登録した場所から。名前で探せば、記事のない場所も</small></span>${ICON.chev}</button>`;
+      const tools = `<span class="ws-tools"><button type="button" data-ws="up" data-k="${k}" aria-label="前へ" ${k ? "" : "disabled"}>${IC.up}</button><button type="button" data-ws="down" data-k="${k}" aria-label="後ろへ" ${k < n - 1 ? "" : "disabled"}>${IC.down}</button><button type="button" data-ws="del" data-k="${k}" aria-label="この場所を外す">${IC.x}<span>外す</span></button></span>`;
+      return `<section class="ws-sec ${route ? "route" : "one"}" data-sec="${k}">
+        ${route ? `<div class="ws-top"><span class="ws-no">${k + 1}</span><b>${k + 1}か所め</b>${tools}</div>` : ""}
+        ${place}
+        ${route ? `<input class="ws-sub" data-ws-sub="${k}" value="${esc(x.head)}" placeholder="小見出し（例：運河をまたぐ橋の上から）" aria-label="${k + 1}か所めの小見出し">` : ""}
+        ${sp ? `<div class="ws-line"><span class="ws-k">評価</span><div class="wr-rate">${[3, 2, 1].map((v) => `<button type="button" class="r${v} ${v === x.rating ? "on" : ""}" data-ws-rate="${v}" data-k="${k}">${RATING[v]}</button>`).join("")}</div></div>` : ""}
+        <div class="ws-line"><span class="ws-k">${route ? "この場所のタグ" : "タグ"}</span><div class="wr-tags ws-tags">${route ? tagBtns(SPOT_TAGS, (t) => x.tags.includes(t), `data-k="${k}" data-ws-stag`) : tagBtns(D.TAGS, (t) => wr.tags.includes(t), "data-wtag")}</div></div>
+        <div class="ws-ed" data-ws-ed="${k}"></div>
+        ${sp ? `<button type="button" class="wr-info ws-info" data-ws="info" data-k="${k}"><span class="ws-info-h">${IC.info}<b>場所の情報</b><small>本文には入りません。記事の「詳しく」に出ます</small></span><span class="ws-info-v">${infoSummary(x.info || infoFrom(sp))}</span></button>` : ""}
+      </section>`;
+    };
+    const st = wr.recId ? "公開中・直したら「更新する」" : wr.savedAt ? `下書き保存 ${wr.savedAt}` : "下書き";
+    p.innerHTML = `<div class="wr ${route ? "is-route" : ""}">
       <div class="wr-head">
         <div class="wr-bar">
-          <button class="back wr-close" aria-label="閉じる（書いた中身は残ります）">${IC.x}</button>
-          <span class="wr-state" id="wr-state">${wr.savedAt ? `下書き保存 ${wr.savedAt}` : "下書き"}</span>
+          <button class="wr-close" aria-label="閉じる（書いた中身は残ります）">${IC.x}</button>
+          <span class="wr-state" id="wr-state">${st}</span>
           <button class="wr-save" id="wr-save">下書き保存</button>
-          <button class="wr-pub" id="wr-pub">公開に進む</button>
+          <button class="wr-pub" id="wr-pub" data-ws="pub">${wr.recId ? "更新する" : "公開に進む"}</button>
         </div>
-        <div class="wr-tools" id="wr-tools" role="toolbar" aria-label="本文に入れる">
-          <button data-wt="img" title="画像">${IC.image}<span>画像</span></button>
-          <button data-wt="spot" title="行った場所">${IC.pin}<span>場所</span></button>
-          <button data-wt="h" title="見出し"><b class="wt-t">H</b><span>見出し</span></button>
-          <button data-wt="quote" title="引用">${IC.quote}<span>引用</span></button>
-          <button data-wt="bold" title="太字"><b class="wt-t">B</b><span>太字</span></button>
-          <button data-wt="hr" title="区切り線">${IC.hr}<span>区切り</span></button>
-        </div>
+        <div class="rt-tools" id="wr-tools" role="toolbar" aria-label="いま書いている本文に入れる">${WR_TOOLS.map(rtBtn).join("")}</div>
       </div>
       <div class="wr-page">
+        <div class="wr-mode" role="radiogroup" aria-label="記事の形">
+          <button type="button" role="radio" aria-checked="${!route}" class="${route ? "" : "on"}" data-ws-mode="one">${IC.pin}<span><b>1か所</b><small>ひとつの場所の記事</small></span></button>
+          <button type="button" role="radio" aria-checked="${route}" class="${route ? "on" : ""}" data-ws-mode="route">${IC.route}<span><b>複数の場所（ルート）</b><small>回った順に、場所ごとに書く</small></span></button>
+        </div>
         <label class="wr-cover ${wr.cover ? "has" : ""}" title="見出し画像">
-          ${wr.cover ? `<img src="${wr.cover}" alt="見出し画像">` : `${IC.image}<span>見出し画像を追加</span>`}
+          ${wr.cover ? `<img src="${esc(img(wr.cover))}" alt="見出し画像">` : `${IC.image}<span>${route ? "ルートの" : ""}見出し画像を追加</span>`}
           <input type="file" accept="image/*" hidden id="wr-cover-in">
         </label>
-        ${wr.cover ? `<button class="wr-cover-del" id="wr-cover-del">${IC.x}画像を外す</button>` : ""}
-        <textarea class="wr-title" id="wr-title" rows="1" placeholder="記事タイトル" aria-label="記事タイトル">${esc(wr.title)}</textarea>
-        <div class="wr-tags" id="wr-tags"><span>タグ</span>${D.TAGS.map((t) => `<button class="${wr.tag === t ? "on" : ""}" data-wtag="${esc(t)}">#${esc(t)}</button>`).join("")}</div>
-        <div class="wr-body" id="wr-body" contenteditable="true" role="textbox" aria-multiline="true" aria-label="本文" data-ph="ご自由にお書きください。行った場所は、上の「場所」から入れられます。">${wr.body || WR_EMPTY}</div>
+        ${wr.cover ? `<button type="button" class="wr-cover-del" id="wr-cover-del">${IC.x}画像を外す</button>` : ""}
+        <textarea class="wr-title" id="wr-title" rows="1" placeholder="${route ? "ルートのタイトル" : "記事タイトル"}" aria-label="記事タイトル">${esc(wr.title)}</textarea>
+        ${route ? `<div class="ws-line ws-main"><span class="ws-k">メインのタグ<small>読むでは、このタグで出ます</small></span><div class="wr-tags ws-tags">${tagBtns(D.TAGS, (t) => wr.tag === t, "data-wmain")}</div></div>
+        <div class="ws-lead"><div class="ws-k">はじめに<small>ルート全体のこと（なくてもよい）</small></div><div class="ws-ed" data-ws-ed="lead"></div></div>` : ""}
+        ${wr.secs.map(secHTML).join("")}
+        ${route ? `<button type="button" class="ws-more" data-ws="more">${IC.route}<span><b>他の場所も続けて書く</b><small>${wr.secs.length + 1}か所めの場所を選んで、その続きを書きます</small></span></button>` : ""}
+        <div class="wr-end">
+          <button type="button" class="btn ghost" data-ws="preview">${IC.eye}プレビュー</button>
+          <button type="button" class="btn accent" data-ws="pub">${IC.globe}${wr.recId ? "更新する" : "公開に進む"}</button>
+        </div>
       </div>
       <div class="wr-foot"><span id="wr-count"></span><span>試作：この端末の中だけに置き、開き直すと消えます</span></div>
-      <input type="file" accept="image/*" hidden id="wr-img-in">
     </div>`;
-    const body = $("#wr-body", p), title = $("#wr-title", p), count = $("#wr-count", p);
-    try { document.execCommand("defaultParagraphSeparator", false, "p"); } catch (err) { /* なくてもよい */ }
+    const root = $(".wr", p), title = $("#wr-title", p), count = $("#wr-count", p);
     const fitTitle = () => { title.style.height = "auto"; title.style.height = title.scrollHeight + "px"; };
-    const isEmpty = () => !body.textContent.trim() && !body.querySelector("img,hr,.wr-spot,h2,blockquote");
-    const changed = () => {
-      if (!body.firstElementChild && !body.textContent.trim()) body.innerHTML = WR_EMPTY; // 全部消したときも段落を残す
-      wr.body = body.innerHTML;
-      body.classList.toggle("is-empty", isEmpty());
-      const c = body.cloneNode(true); c.querySelectorAll('[contenteditable="false"]').forEach((x) => x.remove()); // 場所のカードは数えない
-      count.textContent = `${wrCount(c.textContent)}文字`;
+    const countNow = () => {
+      let n = wr.title.replace(/\s/g, "").length + $$(".ws-sub", p).reduce((a, x) => a + x.value.replace(/\s/g, "").length, 0);
+      $$(".ws-ed .rt", p).forEach((rt) => { const c = rt.cloneNode(true); c.querySelectorAll('[contenteditable="false"]').forEach((x) => x.remove()); n += c.textContent.replace(/\s/g, "").length; });
+      count.textContent = `${n}文字`;
     };
+    // 描き直す（スクロールの位置はそのまま）。書いた中身は、打つたびに wr に入っている
+    const redraw = (after) => { const sc = p.scrollTop; renderWrite(p); p.scrollTop = sc; if (after) after(); };
+    // 本文（はじめに・場所ごと）。上の道具の帯は、最後に書いていた本文に入れる
+    const eds = [];
+    const mark = (api) => { wrActive = api; $$(".ws-sec, .ws-lead", p).forEach((x) => x.classList.toggle("act", x.contains(api.rt))); };
+    const mk = (key, html, ph, label, set) => {
+      const api = mountEditor($(`[data-ws-ed="${key}"]`, p), { html, tools: WR_TOOLS, bar: false, ph, label, onChange: (h) => { set(h); countNow(); }, onFocus: mark });
+      eds.push(api); return api;
+    };
+    if (route) mk("lead", wr.lead, "ルート全体のこと。どんな日に、どう回ったか、どんな人に向いているか。", "はじめに", (h) => { wr.lead = h; });
+    wr.secs.forEach((x, k) => mk(k, x.html,
+      route ? `${k + 1}か所めのこと。見どころ、おすすめの時間など。上の道具で、画像や写真の列も入れられます。` : "ご自由にお書きください。上の道具や、空の行の「＋」から、画像・写真の列・見出しを、書いている途中のどこにでも入れられます。",
+      route ? `${k + 1}か所めの本文` : "本文", (h) => { x.html = h; }));
+    wrActive = eds[route ? 1 : 0] || eds[0];
+    countNow();
+    const tb = $("#wr-tools", p);
+    tb.addEventListener("mousedown", (e) => e.preventDefault()); // 押しても本文のカーソルが消えないように
+    tb.addEventListener("click", (e) => { const b = e.target.closest("[data-rt]"); if (!b) return; (wrActive && wrActive.rt.isConnected ? wrActive : eds[0]).act(b.dataset.rt); });
     requestAnimationFrame(fitTitle);
-    changed();
-
-    // 本文のカーソルの位置を覚えておく（ツールのボタンを押しても、その位置に入れる）
-    let range = null;
-    const blockOf = (n) => { while (n && n.parentNode !== body) n = n.parentNode; return n || null; };
-    const placeAt = (el, end) => {
-      const r = document.createRange(); r.selectNodeContents(el); r.collapse(!end);
-      const s = getSelection(); s.removeAllRanges(); s.addRange(r); range = r.cloneRange();
-    };
-    const onSel = () => {
-      if (!body.isConnected) { document.removeEventListener("selectionchange", onSel); return; } // 閉じたら外す
-      const s = getSelection();
-      if (s.rangeCount && body.contains(s.anchorNode)) range = s.getRangeAt(0).cloneRange();
-    };
-    document.addEventListener("selectionchange", onSel);
-    const restore = () => {
-      body.focus();
-      if (range && body.contains(range.startContainer)) { const s = getSelection(); s.removeAllRanges(); s.addRange(range); }
-      else placeAt(body.lastElementChild || body, true);
-    };
-    // カーソルのある段落のあとにブロック（画像・場所・区切り線）を入れ、そのあとに書き続けられる段落を置く
-    function insertBlock(html) {
-      const tpl = document.createElement("template"); tpl.innerHTML = html.trim();
-      const frag = tpl.content, after = document.createElement("p");
-      after.innerHTML = "<br>"; frag.appendChild(after);
-      const blk = range && body.contains(range.startContainer) ? blockOf(range.startContainer) : null;
-      const emptyP = blk && blk.tagName === "P" && !blk.textContent.trim();
-      if (emptyP) blk.replaceWith(frag); else if (blk) blk.after(frag); else body.appendChild(frag);
-      body.focus(); placeAt(after);
-      changed();
-    }
-
-    title.addEventListener("input", () => { wr.title = title.value; fitTitle(); changed(); });
-    title.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); body.focus(); placeAt(body.firstElementChild || body); } });
-    body.addEventListener("input", changed);
-    // 貼り付けは文字だけ（ほかのページの見た目やスクリプトを持ち込まない）
-    body.addEventListener("paste", (e) => { e.preventDefault(); document.execCommand("insertText", false, (e.clipboardData || window.clipboardData).getData("text/plain")); });
-    body.addEventListener("drop", (e) => e.preventDefault());
-    body.addEventListener("click", (e) => {
-      const del = e.target.closest("[data-wr-del]");
-      if (del) { const b = del.closest(".wr-spot,.wr-fig"); if (b) { b.remove(); changed(); } return; }
-      const rt = e.target.closest("[data-wr-rate]");
-      if (rt) { $$("button", rt.parentNode).forEach((b) => b.classList.toggle("on", b === rt)); changed(); }
+    title.addEventListener("input", () => { wr.title = title.value; fitTitle(); countNow(); });
+    title.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.isComposing) {
+        e.preventDefault();
+        const sub = $(".ws-sub", p);
+        if (route && !$(".ws-ed", p)) { if (sub) sub.focus(); return; }
+        const rt = eds[0].rt; rt.focus();
+        const r = document.createRange(); r.selectNodeContents(rt.firstElementChild || rt); r.collapse(true);
+        const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      }
     });
-    const tools = $("#wr-tools", p);
-    tools.addEventListener("mousedown", (e) => e.preventDefault()); // 押しても本文のカーソルが消えないように
-    tools.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-wt]"); if (!b) return;
-      const k = b.dataset.wt;
-      if (k === "img") { $("#wr-img-in", p).click(); return; }
-      if (k === "spot") { openSpotPicker(insertBlock); return; }
-      if (k === "hr") { insertBlock("<hr>"); return; }
-      restore();
-      if (k === "bold") { document.execCommand("bold"); changed(); return; }
-      const blk = range && blockOf(range.startContainer);
-      if (blk && !/^(P|H2|BLOCKQUOTE|DIV)$/.test(blk.tagName) || (blk && blk.classList.contains("wr-spot"))) { toast("文字の段落にカーソルを置いてから押してください"); return; }
-      const tag = k === "h" ? "H2" : "BLOCKQUOTE";
-      document.execCommand("formatBlock", false, blk && blk.tagName === tag ? "<p>" : `<${tag.toLowerCase()}>`);
-      changed();
-    });
-    $("#wr-img-in", p).addEventListener("change", async (e) => {
-      const f = e.target.files && e.target.files[0]; e.target.value = "";
-      if (!f) return;
-      try {
-        const src = await shrinkPhoto(f, 1600);
-        insertBlock(`<figure class="wr-fig" contenteditable="false"><img src="${src}" alt=""><figcaption contenteditable="true" data-ph="キャプションを入力（なくてもよい）"></figcaption><button class="wr-x" data-wr-del aria-label="画像を外す">${IC.x}</button></figure>`);
-        toast("画像を入れました（位置情報は消してあります）");
-      } catch (err) { toast(err.message); }
-    });
+    root.addEventListener("input", (e) => { const sb = e.target.closest("[data-ws-sub]"); if (sb && wr.secs[Number(sb.dataset.wsSub)]) { wr.secs[Number(sb.dataset.wsSub)].head = sb.value; countNow(); } });
     $("#wr-cover-in", p).addEventListener("change", async (e) => {
       const f = e.target.files && e.target.files[0]; e.target.value = "";
       if (!f) return;
-      try { wr.cover = await shrinkPhoto(f, 1600); paint(); } catch (err) { toast(err.message); }
+      try { wr.cover = await shrinkPhoto(f, 1600); redraw(); } catch (err) { toast(err.message); }
     });
     const cd = $("#wr-cover-del", p);
-    if (cd) cd.addEventListener("click", () => { wr.cover = null; paint(); });
-    $("#wr-tags", p).addEventListener("click", (e) => {
-      const b = e.target.closest("[data-wtag]"); if (!b) return;
-      wr.tag = wr.tag === b.dataset.wtag ? null : b.dataset.wtag;
-      $$("[data-wtag]", p).forEach((x) => x.classList.toggle("on", x.dataset.wtag === wr.tag));
-    });
+    if (cd) cd.addEventListener("click", () => { wr.cover = null; redraw(); });
+    $(".wr-close", p).addEventListener("click", () => { stack.pop(); paint(); if (!stack.length) refreshView(); });
     $("#wr-save", p).addEventListener("click", () => {
       const d = new Date();
       wr.savedAt = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
       $("#wr-state", p).textContent = `下書き保存 ${wr.savedAt}`;
       toast("下書きを保存しました（試作：この端末の中だけ）");
     });
-    $("#wr-pub", p).addEventListener("click", () => {
-      if (!wr.title.trim()) { title.focus(); toast("タイトルを入れてください"); return; }
-      toast("試作なので、公開はまだできません（書く画面だけ）");
+    const focusSec = (k) => { const x = $(`[data-sec="${k}"]`, p); if (x) x.scrollIntoView({ block: "center", behavior: "smooth" }); };
+    // 場所を選ぶ。ルートで何か所かまとめて選んだら、そのあとに場所の欄を足す
+    const pickPlace = (k) => {
+      const have = new Set(wr.secs.filter((y, j) => j !== k && y.spot).map((y) => y.spot));
+      openSpotPicker((list) => {
+        const x = wr.secs[k]; if (!x) return;
+        const ok = list.filter((sp) => sp && !have.has(sp.id)), [first, ...rest] = ok;
+        if (!first) { toast("その場所は、もう入っています"); return; }
+        if (x.spot !== first.id) { x.spot = first.id; x.info = infoFrom(first); }
+        let msg = `${first.name}を${wr.mode === "route" ? `${k + 1}か所めに` : ""}入れました`;
+        if (rest.length) {
+          wr.secs.splice(k + 1, 0, ...rest.map((sp) => newSec(sp.id)));
+          msg = `${ok.length}か所を、場所ごとに書けるようにしました`;
+          if (wr.mode !== "route") { wr.mode = "route"; if (!wr.tag) wr.tag = wr.tags[0] || null; msg += "（複数の場所の記事にしました）"; }
+        }
+        toast(msg);
+        redraw();
+      }, have, { multi: route, title: route ? `${k + 1}か所めの場所` : "行った場所" });
+    };
+    const setMode = (m) => {
+      if (m === wr.mode) return;
+      if (m === "one") {
+        const used = wr.secs.filter((x) => x.spot || !htmlBlank(x.html) || x.head.trim());
+        if (used.length > 1 && !confirm(`1か所の記事にすると、2か所め以降の${used.length - 1}か所（その本文も）を外します。よいですか？`)) return;
+        const first = used[0] || newSec();
+        if (!htmlBlank(wr.lead)) first.html = wr.lead + (htmlBlank(first.html) ? "" : first.html); // はじめには、本文の前に入れる
+        wr.tags = [...new Set([...wr.tags, ...(wr.tag ? [wr.tag] : []), ...first.tags.filter((t) => D.TAGS.includes(t))])];
+        wr.lead = ""; wr.secs = [first];
+      } else if (!wr.tag) wr.tag = wr.tags[0] || null;
+      wr.mode = m;
+      redraw();
+    };
+    // 公開・プレビューの前の確かめ。記事の形を作って返す（まだどこにも入れない）
+    const wrCheck = (preview) => {
+      const rt = wr.mode === "route", secs = wr.secs.filter((x) => x.spot && spotById[x.spot]);
+      if (!preview && !wr.title.trim()) { title.focus(); title.scrollIntoView({ block: "center" }); toast("タイトルを入れてください"); return null; }
+      if (!secs.length) { focusSec(0); toast(rt ? "場所を1つ以上選んでください（記事のない場所も、名前で探せます）" : "行った場所を選んでください（記事のない場所も、名前で探せます）"); return null; }
+      const lost = wr.secs.findIndex((x) => !x.spot && (!htmlBlank(x.html) || x.head.trim()));
+      if (lost >= 0) { focusSec(lost); toast(`${lost + 1}か所めの場所を選んでください（いらなければ「外す」）`); return null; }
+      return makeRecord({
+        id: wr.recId, title: wr.title.trim() || "（タイトルなし）", mode: wr.mode, tag: wr.tag, tags: wr.tags, cover: wr.cover,
+        vis: (wr.recId && recById[wr.recId] && recById[wr.recId].vis) || "public", leadBlocks: rt ? blocksOf(wr.lead) : [],
+        secs: secs.map((x) => ({ spot: x.spot, rating: x.rating, head: rt ? x.head.trim() : "", tags: rt ? x.tags : [], info: x.info, blocks: blocksOf(x.html) })),
+      });
+    };
+    root.addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b || !root.contains(b) || b.closest(".ws-ed")) return; // 本文の中は、エディタが受け持つ
+      const d = b.dataset, k = d.k != null ? Number(d.k) : -1, x = wr.secs[k];
+      if (d.wsMode) { setMode(d.wsMode); return; }
+      if (d.wtag != null) { const i = wr.tags.indexOf(d.wtag); if (i >= 0) wr.tags.splice(i, 1); else wr.tags.push(d.wtag); b.classList.toggle("on", i < 0); return; }
+      if (d.wmain != null) { wr.tag = wr.tag === d.wmain ? null : d.wmain; $$("[data-wmain]", p).forEach((y) => y.classList.toggle("on", y.dataset.wmain === wr.tag)); return; }
+      if (d.wsStag != null && x) { const i = x.tags.indexOf(d.wsStag); if (i >= 0) x.tags.splice(i, 1); else x.tags.push(d.wsStag); b.classList.toggle("on", i < 0); return; }
+      if (d.wsRate && x) { const v = Number(d.wsRate); x.rating = x.rating === v ? 0 : v; $$(`[data-ws-rate][data-k="${k}"]`, p).forEach((y) => y.classList.toggle("on", Number(y.dataset.wsRate) === x.rating)); return; }
+      if (d.ws === "place" && x) { pickPlace(k); return; }
+      if (d.ws === "info" && x && spotById[x.spot]) {
+        const sp = spotById[x.spot];
+        openInfoSheet(sp, x.info || infoFrom(sp), (info) => { x.info = info; const v = $(`[data-sec="${k}"] .ws-info-v`, p); if (v) v.innerHTML = infoSummary(info); });
+        return;
+      }
+      if ((d.ws === "up" || d.ws === "down") && x) {
+        const j = d.ws === "up" ? k - 1 : k + 1;
+        if (j < 0 || j >= wr.secs.length) return;
+        [wr.secs[k], wr.secs[j]] = [wr.secs[j], wr.secs[k]];
+        redraw(() => { const y = $(`[data-sec="${j}"]`, p); if (y) y.scrollIntoView({ block: "nearest", behavior: "smooth" }); });
+        return;
+      }
+      if (d.ws === "del" && x) {
+        const sp = x.spot && spotById[x.spot];
+        if ((sp || !htmlBlank(x.html) || x.head.trim()) && !confirm(`${sp ? `「${sp.name}」` : `${k + 1}か所め`}を記事から外しますか？（この場所に書いた本文も消えます）`)) return;
+        wr.secs.splice(k, 1);
+        if (!wr.secs.length) wr.secs.push(newSec());
+        redraw(); return;
+      }
+      if (d.ws === "more") {
+        const empty = wr.secs.findIndex((y) => !y.spot);
+        if (empty >= 0) { focusSec(empty); pickPlace(empty); return; }
+        wr.secs.push(newSec());
+        const k2 = wr.secs.length - 1;
+        redraw(() => { const y = $(`[data-sec="${k2}"]`, p); if (y) y.scrollIntoView({ block: "start", behavior: "smooth" }); pickPlace(k2); });
+        return;
+      }
+      if (d.ws === "preview") { const r = wrCheck(true); if (r) openPreview(r); return; }
+      if (d.ws === "pub") { const r = wrCheck(false); if (r) openPublishSheet(r, (rec) => { wr.recId = rec.id; paint(); openArticle(rec.id); }); }
     });
   }
-  // 本文に入れる場所を選ぶ（たどっている予定・つくっている予定・登録した場所）
-  function openSpotPicker(onPick) {
+  // 公開する前の確かめ（形・場所・タグ・見出し画像・公開範囲）。ここからもプレビューできる
+  function openPublishSheet(r, onDone) {
+    closePicker();
+    const again = !!recById[r.id], sp = (x) => spotById[x.spot];
+    let vis = (again && recById[r.id].vis) || r.vis || "public";
+    const fresh = r.spots.filter((x) => sp(x).temp).length;
+    const box = document.createElement("div");
+    box.className = "picker-back"; box.id = "picker";
+    box.innerHTML = `<div class="picker pub-sheet" role="dialog" aria-label="公開する">
+      <div class="picker-head">${IC.globe}<div><b>${again ? "記事を更新する" : "記事を公開する"}</b><div class="small">試作：この端末の中だけで「読む」と地図に出ます（開き直すと消えます）</div></div></div>
+      <div class="picker-list">
+        <div class="pub-row"><span>タイトル</span><b>${esc(r.title)}</b></div>
+        <div class="pub-row"><span>形</span><div>${r.spots.length > 1 ? `複数の場所（ルート・${r.spots.length}か所）` : "1か所の記事"}</div></div>
+        <div class="pub-row"><span>場所</span><div>${r.spots.map((x, i) => `<div class="pub-spot"><i>${i + 1}</i><span>${esc(sp(x).name)}${x.head ? `<small>${esc(x.head)}</small>` : ""}${x.tags.length ? `<small>${x.tags.map((t) => "#" + esc(t)).join(" ")}</small>` : ""}</span>${sp(x).temp ? "<em>新しく登録されます</em>" : ""}</div>`).join("")}</div></div>
+        <div class="pub-row"><span>タグ</span><div>${r.type === "route" ? `メイン #${esc(r.mainTag)}` : r.tags.map((t) => "#" + esc(t)).join(" ")}</div></div>
+        <div class="pub-row"><span>見出し画像</span><div>${r.cover ? `<img class="pub-cover" src="${esc(img(r.cover))}" alt="">` : "<small>なし（本文に写真があれば、その1枚め）</small>"}</div></div>
+        <div class="pub-row"><span>公開範囲</span><div class="vis">${VIS.filter(([k]) => k !== "private").map(([k, l]) => `<button data-pv="${k}" class="${vis === k ? "on" : ""}">${l}</button>`).join("")}</div></div>
+        ${fresh ? `<div class="pub-note">${IC.pin}<span>まだ記事のない場所は、公開すると登録されて、ほかの人も地図で探したり、予定に入れたりできるようになります。</span></div>` : ""}
+      </div>
+      <div class="picker-foot pub-foot"><button class="mini-btn" data-pk="close">やめる</button><span class="pk-gap"></span><button class="btn ghost small" data-pk="pv">${IC.eye}プレビュー</button><button class="btn accent small" data-pk="go">${IC.globe}${again ? "更新する" : "公開する"}</button></div>
+    </div>`;
+    $("#app").appendChild(box);
+    requestAnimationFrame(() => box.classList.add("show"));
+    box.addEventListener("click", (e) => {
+      const v = e.target.closest("[data-pv]");
+      if (v) { vis = v.dataset.pv; $$("[data-pv]", box).forEach((x) => x.classList.toggle("on", x === v)); return; }
+      const k = e.target.closest("[data-pk]");
+      if (k && k.dataset.pk === "pv") { r.vis = vis; openPreview(r); return; }
+      if (k && k.dataset.pk === "go") {
+        r.vis = vis;
+        publishRecord(r);
+        closePicker();
+        toast(again ? "記事を更新しました" : fresh ? `公開しました。${fresh}か所が新しく登録されました` : "公開しました。「読む」と地図に出ます");
+        onDone(r);
+      } else if ((k && k.dataset.pk === "close") || e.target === box) closePicker();
+    });
+  }
+  /* 記事に入れる場所を選ぶ（たどっている予定・つくっている予定・登録した場所。名前で探せば、記事のない場所も）
+     onPick(場所の一覧)。have：もう入っている場所（選べない）。opt：{ title, multi（まとめて選べる） } */
+  function openSpotPicker(onPick, have = new Set(), opt = {}) {
     closePicker();
     const groups = [];
     if (state.plan) groups.push([`たどっている予定「${state.plan.title}」`, state.plan.stops.filter(live).map((s) => s.spot), true]);
     if (state.draft.stops.length) groups.push(["つくっている予定", state.draft.stops.map((s) => s.spot), true]);
     if (V.saved.length) groups.push(["登録した場所", V.saved.map((x) => x.spot), false]);
+    const multi = opt.multi !== false, ttl = opt.title || "場所を選ぶ";
+    const row = (id) => { const sp = spotById[id], dis = have.has(id); return `<button class="picker-row pk-plain" data-pk-spot="${id}" ${dis ? "disabled" : ""}><span class="pr-name">${esc(sp.name)}</span><span class="pr-time">${dis ? "もう入っています" : esc(sp.kind)}</span></button>`; };
     const box = document.createElement("div");
     box.className = "picker-back"; box.id = "picker";
-    box.innerHTML = `<div class="picker" role="dialog" aria-label="本文に入れる場所">
-      <div class="picker-head">${IC.pin}<div><b>本文に入れる場所</b><div class="small">押すと、カーソルのところに場所のカードが入ります</div></div></div>
-      <div class="picker-list">${groups.map(([label, ids, all]) => `<div class="pk-label"><span>${esc(label)}</span>${all && ids.length > 1 ? `<button class="mini-btn" data-pk-all="${ids.join(",")}">まとめて入れる（${ids.length}か所）</button>` : ""}</div>`
-        + ids.map((id) => `<button class="picker-row pk-plain" data-pk-spot="${id}"><span class="pr-name">${esc(spotById[id].name)}</span><span class="pr-time">${esc(spotById[id].kind)}</span></button>`).join("")).join("")
-        || '<div class="small">まだ場所がありません。予定をつくるか、記事の場所を「＋ 登録」してください。</div>'}</div>
+    box.innerHTML = `<div class="picker" role="dialog" aria-label="${esc(ttl)}">
+      <div class="picker-head">${IC.pin}<div><b>${esc(ttl)}</b><div class="small">予定や登録した場所から選ぶか、名前で探します</div></div></div>
+      <button class="picker-row pk-search" data-pk-search>${IC.search}<span class="pr-name">名前で探す（記事のない場所も）</span>${ICON.chev}</button>
+      <div class="picker-list">${groups.map(([label, ids, all]) => {
+        const free = ids.filter((id) => !have.has(id) && spotById[id]);
+        return `<div class="pk-label"><span>${esc(label)}</span>${multi && all && free.length > 1 ? `<button class="mini-btn" data-pk-all="${free.join(",")}">まとめて入れる（${free.length}か所）</button>` : ""}</div>` + ids.filter((id) => spotById[id]).map(row).join("");
+      }).join("") || '<div class="small">予定や登録した場所がまだありません。上の「名前で探す」から入れられます。</div>'}</div>
       <div class="picker-foot"><span></span><button class="btn primary small" data-pk="close">閉じる</button></div>
     </div>`;
     $("#app").appendChild(box);
     requestAnimationFrame(() => box.classList.add("show"));
     box.addEventListener("click", (e) => {
       const one = e.target.closest("[data-pk-spot]"), all = e.target.closest("[data-pk-all]");
-      if (one) { closePicker(); onPick(spotBlock(spotById[one.dataset.pkSpot])); }
-      else if (all) { closePicker(); onPick(all.dataset.pkAll.split(",").map((id) => spotBlock(spotById[id])).join(WR_EMPTY)); }
+      if (e.target.closest("[data-pk-search]")) { closePicker(); openPlaceSearch({ title: `見つけた場所を、記事の「${ttl}」に入れます`, onPick: (sp) => onPick([sp]) }); }
+      else if (one && !one.disabled) { closePicker(); onPick([spotById[one.dataset.pkSpot]]); }
+      else if (all) { closePicker(); onPick(all.dataset.pkAll.split(",").map((id) => spotById[id])); }
       else if (e.target.closest("[data-pk]") || e.target === box) closePicker();
     });
+  }
+
+  /* ---------- 自分の記録の窓：上は「わたしの記録」（自分だけ）、下は「公開する記事」 ----------
+     窓の右下の小さな書くボタン（✎）を押すと、切り取り線の下に、公開用の記事を書く場所がのびる。
+     場所・評価・写真は記録と同じものを使い、タイトル・公開範囲（公開／メンバー限定）・場所の情報・本文は公開用に別に書く */
+  // 自分の記録の場所と、地図の場所（D.spots）をつなぐ。公開するときに、まだなければ新しく登録する
+  // create が "temp" のときはプレビュー用（まだ登録しない。公開したときに登録される）
+  function spotFor(s, create) {
+    if (s.spot && spotById[s.spot]) return spotById[s.spot];
+    const near = D.spots.find((sp) => sp.name === s.name && R.distM(sp, s) < 150);
+    if (near) { s.spot = near.id; return near; }
+    if (!create) return null;
+    const sp = { id: "u" + Date.now().toString(36), name: s.name, lat: s.lat, lng: s.lng, kind: "場所", tags: [], indoor: true, hours: null, price: null };
+    if (create === "temp") sp.temp = true; else sp.user = true;
+    D.spots.push(sp); spotById[sp.id] = sp; s.spot = sp.id;
+    return sp;
+  }
+  const EDIT_TOOLS = ["recph", "img", "gal", "h", "quote", "ul", "bold", "link", "hr"];
+  // 見出し画像を選ぶ（わたしの記録・公開用）。新しく入れるか、記録の写真から選ぶ
+  function coverPickHTML(key, src, photos) {
+    return `<div class="cv-pick">
+      ${src ? `<div class="cv-has"><img src="${esc(img(src))}" alt="見出し画像"><button type="button" class="cv-del" data-cv-del="${key}">${IC.x}外す</button></div>` : ""}
+      <div class="cv-row">
+        <label class="cv-add">${IC.image}<span>${src ? "変える" : "画像を入れる"}</span><input type="file" accept="image/*" hidden data-cv-in="${key}"></label>
+        ${photos.length ? `<span class="cv-or">記録の写真から</span>${photos.map((u, j) => `<button type="button" class="cv-ph ${u === src ? "on" : ""}" data-cv-ph="${key}" data-j="${j}" aria-label="記録の写真${j + 1}を見出し画像にする"><img src="${esc(img(u))}" alt=""></button>`).join("")}` : ""}
+      </div>
+    </div>`;
+  }
+  function openRecWindow(r, s, part, onDone) {
+    closePicker();
+    const box = document.createElement("div");
+    box.className = "picker-back rw-back"; box.id = "picker";
+    const recPhotos = () => s.photos || [];
+    box.innerHTML = `<div class="rw" role="dialog" aria-label="${esc(s.name)}の記録">
+      <div class="rw-head"><div class="rw-ttl"><b>${esc(s.name)}</b><small>${esc(r.date)}・${RATING[s.rating] || ""}</small></div><button class="btn primary small" data-rw="done">${IC.check}完了</button></div>
+      <div class="rw-scroll">
+        <section class="rw-sec mine">
+          <div class="rw-band mine">${IC.lock}<b>わたしの記録</b><small>自分だけが見られます（非公開）</small></div>
+          <div class="mm-lb">見出し画像 <span>記録を開いたとき、いちばん上に出ます</span></div>
+          <div data-cv-wrap="mine">${coverPickHTML("mine", s.cover, recPhotos())}</div>
+          <label class="mm-lb" for="rw-title">記録のタイトル</label>
+          <input class="field" id="rw-title" value="${esc(r.title)}">
+          <div class="mm-lb">本文 <span>写真・見出し・リンクも、記事と同じように</span></div>
+          <div class="rw-ed" id="rw-mine"></div>
+        </section>
+        <div id="rw-pubwrap"></div>
+      </div>
+      <button class="rw-pen" data-rw="pub" aria-label="公開する記事も書く">${IC.edit}<span>公開用も書く</span></button>
+    </div>`;
+    $("#app").appendChild(box);
+    requestAnimationFrame(() => box.classList.add("show"));
+    const pen = $(".rw-pen", box), wrapPub = $("#rw-pubwrap", box);
+    let pubEd = null;
+    mountEditor($("#rw-mine", box), {
+      html: mineHTML(s), tools: EDIT_TOOLS, label: "わたしの記録", recPhotos,
+      ph: "ここは自分だけの記録です。思ったこと、次に行くときのメモ、写真などを自由に。",
+      onChange: (h) => { s.mine = h; },
+    });
+    $("#rw-title", box).addEventListener("input", (e) => { r.title = e.target.value; });
+    // 見出し画像
+    const coverOf = (key) => (key === "mine" ? s.cover : s.pub && s.pub.cover) || null;
+    const setCover = (key, src) => {
+      if (key === "mine") s.cover = src; else if (s.pub) s.pub.cover = src;
+      const w = $(`[data-cv-wrap="${key}"]`, box); if (w) w.innerHTML = coverPickHTML(key, src, recPhotos());
+    };
+    box.addEventListener("change", async (e) => {
+      const inp = e.target.closest("[data-cv-in]"); if (!inp) return;
+      const f = inp.files && inp.files[0], key = inp.dataset.cvIn; inp.value = "";
+      if (!f) return;
+      try { setCover(key, await shrinkPhoto(f, 1600)); toast("見出し画像を入れました（位置情報は消してあります）"); } catch (err) { toast(err.message); }
+    });
+    // 公開する記事の形（プレビューにも使う）
+    const pubRecord = (create) => {
+      const pub = s.pub, sp = spotFor(s, create);
+      return makeRecord({ id: pub.recId, title: pub.title.trim() || "（タイトルなし）", mode: "one", tags: pub.tags, cover: pub.cover, vis: pub.vis, secs: [{ spot: sp.id, rating: s.rating, info: pub.info, blocks: pubEd.blocks() }] });
+    };
+    function showPub(scroll) {
+      if (!s.pub) s.pub = { title: "", vis: "public", tags: [], info: null, html: "", recId: null, cover: null };
+      const pub = s.pub;
+      if (!pub.info) pub.info = infoFrom(spotFor(s, false) || { name: s.name });
+      pen.hidden = true;
+      // 並び：見出し画像 → タイトル → 場所 → タグ → 本文 → 場所の情報 → 公開範囲 → 公開する
+      wrapPub.innerHTML = `<div class="rw-cut"><span>${IC.globe}ここから下は、公開する記事</span></div>
+        <section class="rw-sec pub">
+          <div class="rw-band pub">${IC.globe}<b>公開する記事</b><small data-rw-st>${pub.recId ? `公開中（${visLabel(pub.vis)}）` : "まだ公開していません"}</small></div>
+          <div class="mm-lb">見出し画像 <span>記事のカードと、記事のいちばん上に出ます</span></div>
+          <div data-cv-wrap="pub">${coverPickHTML("pub", pub.cover, recPhotos())}</div>
+          <label class="mm-lb" for="rw-ptitle">記事のタイトル <span>記録のタイトルとは別</span></label>
+          <input class="field" id="rw-ptitle" value="${esc(pub.title)}" placeholder="例：${esc(s.name)}で過ごす午後">
+          <div class="rw-same">${IC.pin}<b>${esc(s.name)}</b>${ratingTag(s.rating)}<small>場所・評価は記録と同じ</small></div>
+          <div class="mm-lb">タグ</div>
+          <div class="wr-tags rw-tags">${D.TAGS.map((t) => `<button class="${pub.tags.includes(t) ? "on" : ""}" data-ptag="${esc(t)}">#${esc(t)}</button>`).join("")}</div>
+          <div class="mm-lb rw-lb2">本文 <button class="mini-btn" data-rw="copy">${IC.list}わたしの記録を写す</button></div>
+          <div class="rw-ed" id="rw-pub"></div>
+          <details class="rw-info">
+            <summary>${IC.info}<span class="rw-info-h"><b>場所の情報</b><small>営業時間・定休日・屋内／屋外・いた時間・費用・住所。本文には入らず、記事の「詳しく」に出ます</small></span><span class="rw-info-v" data-pi-sum>${infoSummary(pub.info)}</span></summary>
+            <div class="pi" data-pi>${infoFormInner(pub.info)}</div>
+          </details>
+          <div class="mm-lb">公開範囲</div>
+          <div class="vis">${VIS.filter(([k]) => k !== "private").map(([k, l]) => `<button data-pvis="${k}" class="${pub.vis === k ? "on" : ""}">${l}</button>`).join("")}</div>
+          <div class="rw-acts"><button class="mini-btn danger" data-rw="drop">${pub.recId ? "公開をやめる" : "公開用を消す"}</button><span class="rw-gap"></span><button class="btn ghost" data-rw="preview">${IC.eye}プレビュー</button><button class="btn accent" data-rw="publish">${IC.globe}${pub.recId ? "更新する" : "公開する"}</button></div>
+        </section>`;
+      bindInfoForm($("[data-pi]", wrapPub), pub.info, (info) => { const v = $("[data-pi-sum]", wrapPub); if (v) v.innerHTML = infoSummary(info); });
+      pubEd = mountEditor($("#rw-pub", wrapPub), {
+        html: pub.html, tools: EDIT_TOOLS, label: "公開する記事の本文", recPhotos,
+        ph: "みんなに向けた本文。おすすめの時間・行き方・気をつけることなど。「記録の写真」で、記録と同じ写真を入れられます。",
+        onChange: (h) => { pub.html = h; },
+      });
+      $("#rw-ptitle", wrapPub).addEventListener("input", (e) => { pub.title = e.target.value; });
+      if (scroll) setTimeout(() => wrapPub.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+    }
+    function close() {
+      s.note = plainOf(blocksOf(s.mine)).slice(0, 80);
+      const p = s.pub; // 公開用を開いただけで何も書いていなければ、下書きを残さない
+      if (p && !p.recId && !p.title.trim() && !p.cover && !htmlText(p.html || "").trim() && !/<img|wr-spot|<hr/.test(p.html || "")) s.pub = null;
+      closePicker(); if (onDone) onDone();
+    }
+    box.addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b || !box.contains(b)) return;
+      const d = b.dataset, pub = s.pub;
+      if (d.rw === "done") { close(); return; }
+      if (d.rw === "pub") { showPub(true); return; }
+      if (d.cvDel) { setCover(d.cvDel, null); return; }
+      if (d.cvPh) { const u = recPhotos()[Number(d.j)]; setCover(d.cvPh, coverOf(d.cvPh) === u ? null : u); return; }
+      if (!pub) return;
+      if (d.pvis) { pub.vis = d.pvis; $$("[data-pvis]", box).forEach((x) => x.classList.toggle("on", x === b)); return; }
+      if (d.ptag) { const i = pub.tags.indexOf(d.ptag); if (i >= 0) pub.tags.splice(i, 1); else pub.tags.push(d.ptag); b.classList.toggle("on", i < 0); return; }
+      if (d.rw === "copy" && pubEd) {
+        if (!pubEd.isEmpty() && !confirm("公開用の本文を、わたしの記録で置き換えますか？")) return;
+        pubEd.setHTML(mineHTML(s)); toast("わたしの記録を写しました。見せたくないところは消してください"); return;
+      }
+      if (d.rw === "drop") {
+        // 公開中なら、公開だけやめて下書きに戻す（書いた記事は残す）。下書きなら、公開用を消す
+        if (pub.recId) {
+          if (!confirm("公開をやめますか？（書いた記事は下書きとして残ります。わたしの記録もそのまま）")) return;
+          unpublish(pub.recId); pub.recId = null; showPub(false);
+          toast("公開をやめました。記事は下書きとして残っています"); return;
+        }
+        if (!confirm("公開用の記事を消しますか？（わたしの記録は残ります）")) return;
+        s.pub = null; pubEd = null; wrapPub.innerHTML = ""; pen.hidden = false;
+        toast("公開用の記事を消しました"); return;
+      }
+      if (d.rw === "preview" && pubEd) { const rec = pubRecord("temp"); if (rec) openPreview(rec); return; }
+      if (d.rw === "publish" && pubEd) {
+        if (!pub.title.trim()) { $("#rw-ptitle", box).focus(); toast("記事のタイトルを入れてください"); return; }
+        const sp = spotFor(s, true), again = !!pub.recId, fresh = !recsAt(sp.id).some((x) => x.id !== pub.recId);
+        const rec = publishRecord(pubRecord(true));
+        if (!rec) return;
+        pub.recId = rec.id;
+        $("[data-rw-st]", box).textContent = `公開中（${visLabel(pub.vis)}）`;
+        b.innerHTML = `${IC.globe}更新する`;
+        $('[data-rw="drop"]', box).textContent = "公開をやめる";
+        toast(again ? "記事を更新しました" : fresh ? "公開しました。この場所は登録され、ほかの人も地図で使えます" : "公開しました。「読む」と地図に出ます");
+      }
+    });
+    if (s.pub || part === "pub") showPub(part === "pub");
+  }
+
+  /* ---------- 場所を名前で探す（探す・つくる・組み直す・書く画面の「場所」で使う） ----------
+     1) 記事のある場所（このアプリに登録済み）：打つとすぐ出る・無料
+     2) 地図の場所（OpenStreetMap の Nominatim）：「探す」を押したときだけ・無料。1秒に1回まで、という決まりを守る
+     3) Google（Places API (New)）：「Google で探す」を押したときだけ。回数で料金がかかるので、ほかで見つからないときに使う
+     見つけた場所は、この端末のメモリにだけ置く（localStorage・サービスワーカーには入れない）。
+     公開する記事を書くと、その場所は登録されて、ほかの人も地図で使えるようになる */
+  const kana = (s) => String(s || "").normalize("NFKC").toLowerCase().replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/\s+/g, "");
+  const OSM_KIND = [
+    [/^shop:convenience$/, "コンビニ", true], [/^tourism:(hotel|hostel|guest_house|motel|apartment)$/, "ホテル", true],
+    [/^(railway|public_transport):(station|halt|stop_position|platform)$/, "駅", true], [/^amenity:cafe$/, "カフェ", true],
+    [/^amenity:(restaurant|fast_food|food_court|pub|bar|izakaya)$/, "グルメ", true], [/^amenity:library$/, "図書館", true],
+    [/^tourism:museum$/, "博物館", true], [/^(tourism:gallery|amenity:arts_centre)$/, "美術館", true],
+    [/^leisure:(park|garden)$/, "公園", false], [/^natural:(peak|volcano)$/, "山", false], [/^natural:(beach|bay)$/, "海", false],
+    [/^(amenity:place_of_worship|historic:.*|tourism:(attraction|viewpoint|artwork))$/, "名所", false], [/^shop:/, "店", true],
+  ];
+  const kindOf = (table, key) => { const hit = table.find(([re]) => re.test(key)); return hit ? { kind: hit[1], indoor: hit[2] } : { kind: "場所", indoor: true }; };
+  const G_KIND = [
+    [/convenience_store/, "コンビニ", true], [/lodging|hotel/, "ホテル", true], [/(train|subway|transit|light_rail)_station|bus_station/, "駅", true],
+    [/ramen/, "ラーメン", true], [/cafe|coffee/, "カフェ", true], [/restaurant|food|bakery|bar/, "グルメ", true], [/library/, "図書館", true],
+    [/museum/, "博物館", true], [/art_gallery/, "美術館", true], [/park|garden/, "公園", false],
+    [/tourist_attraction|shrine|temple|church|place_of_worship|historical/, "名所", false], [/store|shop/, "店", true],
+  ];
+  // 住所（OpenStreetMap の住所の部品を、日本の順に並べる）
+  function jpAddr(a, full) {
+    // 道路の名前（〇〇通り・国道〇号）は日本の住所には入れない
+    const parts = a ? [...new Set([a.province || a.state, a.city || a.town || a.village || a.county, a.city_district || a.suburb, a.quarter || a.neighbourhood].filter(Boolean))] : [];
+    if (parts.length >= 2) return parts.join("") + (a.house_number && parts.length >= 3 ? a.house_number : ""); // 番地は町名まであるときだけ
+    return String(full || "").split(",").slice(1).reverse().map((x) => x.trim()).filter((x) => x && x !== "日本" && !/^\d{3}-?\d{4}$/.test(x)).join("");
+  }
+  let osmAt = 0;
+  async function osmFetch(params, retry = 1) {
+    const wait = osmAt + 1100 - Date.now(); // Nominatim の決まり：1秒に1回まで
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    osmAt = Date.now();
+    const ac = new AbortController(), tm = setTimeout(() => ac.abort(), 9000); // 返事が来ないときは待ちすぎない
+    try {
+      const res = await fetch("https://nominatim.openstreetmap.org/search?" + new URLSearchParams({ format: "jsonv2", addressdetails: "1", namedetails: "1", "accept-language": "ja", countrycodes: "jp", limit: "10", ...params }), { signal: ac.signal });
+      if (!res.ok) throw new Error("osm " + res.status);
+      return await res.json();
+    } catch (e) {
+      if (retry > 0) { await new Promise((r) => setTimeout(r, 1200)); return osmFetch(params, retry - 1); } // たまに失敗するので、1回だけ自動でやり直す
+      throw e;
+    } finally { clearTimeout(tm); }
+  }
+  // 名前に支店名をつける（「ファミリーマート」→「ファミリーマート 大宮上小町店」）
+  function osmName(x) {
+    const nd = x.namedetails || {}, base = x.name || nd.name || String(x.display_name || "").split(",")[0];
+    const br = nd["branch:ja"] || nd.branch || "";
+    return br && !base.includes(br) ? `${base} ${br}` : base;
+  }
+  async function osmSearch(q, c) {
+    const d = 0.12; // まず地図のまわり（10km ほど）で。なければ日本全体で
+    let list = await osmFetch({ q, viewbox: [c[1] - d, c[0] + d, c[1] + d, c[0] - d].map((v) => v.toFixed(4)).join(","), bounded: "1" });
+    if (!list.length) list = await osmFetch({ q });
+    const at = { lat: c[0], lng: c[1] };
+    return list.map((x) => ({
+      src: "osm", name: osmName(x), lat: Number(x.lat), lng: Number(x.lon),
+      addr: jpAddr(x.address, x.display_name), ...kindOf(OSM_KIND, `${x.category}:${x.type}`),
+    })).filter((p) => p.name && Number.isFinite(p.lat) && Number.isFinite(p.lng))
+      .map((p) => ({ ...p, name: p.kind === "駅" && !/駅$/.test(p.name) ? p.name + "駅" : p.name, dist: R.distM(p, at) })) // 「大宮」→「大宮駅」
+      .sort((a, b) => a.dist - b.dist); // 地図の真ん中から近い順
+
+  }
+  let gLib = null;
+  async function googleSearch(q, c) {
+    gLib = gLib || await GM.places();
+    const token = new gLib.AutocompleteSessionToken(); // 候補を出して、選んだ場所を取りに行くまでを1回として数える（そのほうが安い）
+    const { suggestions } = await gLib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+      input: q, sessionToken: token, language: "ja", region: "jp", includedRegionCodes: ["jp"],
+      locationBias: { center: { lat: c[0], lng: c[1] }, radius: 30000 },
+    });
+    return (suggestions || []).filter((x) => x.placePrediction).slice(0, 6).map((x) => {
+      const pp = x.placePrediction;
+      return { src: "google", name: pp.mainText ? pp.mainText.text : pp.text.text, sub: pp.secondaryText ? pp.secondaryText.text : "", pp, ...kindOf(G_KIND, (pp.types || []).join(" ")) };
+    });
+  }
+  // 選んだときだけ、位置と住所を取りに行く（名前は候補の文字を使う。取る項目をしぼって安くする）
+  async function googleResolve(p) {
+    const place = p.pp.toPlace();
+    await place.fetchFields({ fields: ["location", "formattedAddress"] });
+    return { ...p, lat: place.location.lat(), lng: place.location.lng(), addr: String(place.formattedAddress || "").replace(/^日本、\s*/, "").replace(/^〒\d{3}-\d{4}\s*/, "") };
+  }
+  // 見つけた場所を、この端末の中の場所の一覧に足す（同じ名前で近くにあれば、それを使う）
+  function foundSpot(p) {
+    const same = D.spots.find((sp) => kana(sp.name) === kana(p.name) && R.distM(sp, p) < 120);
+    if (same) return same;
+    const sp = { id: "f" + Date.now().toString(36), name: p.name, lat: p.lat, lng: p.lng, kind: p.kind || "場所", tags: [], indoor: p.indoor !== false, hours: null, price: null, addr: p.addr || "", temp: true, src: p.src };
+    D.spots.push(sp); spotById[sp.id] = sp;
+    return sp;
+  }
+  function localMatches(q, c) {
+    const k = kana(q);
+    if (!k) return [];
+    const at = { lat: c[0], lng: c[1] };
+    return D.spots.filter((sp) => !sp.temp && [sp.name, sp.kind, sp.style, sp.addr, ...(sp.tags || [])].some((x) => x && kana(x).includes(k)))
+      .sort((a, b) => R.distM(a, at) - R.distM(b, at)).slice(0, 8);
+  }
+  // 探す画面。o：{ title（何に使うか）, onPick(場所) }
+  function openPlaceSearch(o) {
+    const old = $("#ps"); if (old) old.remove();
+    const c = map ? map.getCenter() : OMIYA;
+    const box = document.createElement("div");
+    box.className = "ps-back"; box.id = "ps";
+    box.innerHTML = `<div class="ps" role="dialog" aria-label="場所を名前で探す">
+      <form class="ps-bar" autocomplete="off">
+        <button type="button" class="ps-x" data-ps="close" aria-label="閉じる">${IC.back}</button>
+        <input type="search" id="ps-in" placeholder="場所の名前（例：大宮駅、ローソン 大宮）" enterkeyhint="search" aria-label="場所の名前">
+        <button class="ps-go" type="submit">探す</button>
+      </form>
+      ${o.title ? `<div class="ps-for">${esc(o.title)}</div>` : ""}
+      <div class="ps-body" id="ps-body"></div>
+    </div>`;
+    $("#app").appendChild(box);
+    const inp = $("#ps-in", box), out = $("#ps-body", box);
+    const st = { q: "", osm: null, osmBusy: false, osmErr: "", g: null, gBusy: false, gErr: "" };
+    let local = [];
+    const close = () => box.remove();
+    const distText = (m) => (m == null ? "" : m < 1000 ? `${Math.round(m / 10) * 10}m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)}km`);
+    const row = (key, src, name, sub, tag) => `<button class="ps-row" data-pick="${key}"><span class="ps-ic ${src}">${src === "app" ? IC.pin : IC.search}</span><span class="ps-tx"><b>${esc(name)}</b><small>${esc(sub)}</small></span>${tag ? `<span class="ps-tag">${esc(tag)}</span>` : ""}</button>`;
+    function draw() {
+      const q = st.q.trim();
+      local = localMatches(q, c);
+      if (!q) {
+        out.innerHTML = `<div class="ps-hint">${IC.pin}<div><b>記事のある場所</b>は、打つとすぐ出ます。<br><b>記事のない場所</b>（初めて行く所・コンビニ・ホテルなど）は「探す」で地図から探します（無料）。<br>それでも見つからないときは、Google でも探せます。</div></div>`;
+        return;
+      }
+      let h = `<div class="ps-lb">記事のある場所 <span>${local.length}件</span></div>`;
+      h += local.length ? local.map((sp, i) => row(`app:${i}`, "app", sp.name, `${sp.kind}${sp.addr ? "・" + sp.addr : ""}`, `記事${recsAt(sp.id).length}`)).join("") : '<div class="ps-none">ありません</div>';
+      h += '<div class="ps-lb">地図の場所 <span>OpenStreetMap・無料</span></div>';
+      if (st.osmBusy) h += '<div class="ps-none">探しています…</div>';
+      else if (st.osmErr) h += `<div class="ps-none">${esc(st.osmErr)}</div>`;
+      else if (st.osm) h += st.osm.length ? st.osm.map((p, i) => row(`osm:${i}`, "osm", p.name, `${p.kind}${p.addr ? "・" + p.addr : ""}`, distText(p.dist))).join("") + '<div class="ps-attr">© OpenStreetMap contributors</div>' : '<div class="ps-none">見つかりませんでした。名前を短くするか、Google で探してください</div>';
+      else h += `<button class="ps-more" data-ps="osm">${IC.search}<span>「${esc(q)}」を地図で探す<small>無料</small></span></button>`;
+      h += '<div class="ps-lb">Google <span>見つからないときだけ</span></div>';
+      if (st.gBusy) h += '<div class="ps-none">探しています…</div>';
+      else if (st.gErr) h += `<div class="ps-none">${esc(st.gErr)}</div>`;
+      else if (st.g) h += st.g.length ? st.g.map((p, i) => row(`g:${i}`, "g", p.name, `${p.kind}${p.sub ? "・" + p.sub : ""}`, "")).join("") + '<div class="ps-attr">powered by Google</div>' : '<div class="ps-none">見つかりませんでした</div>';
+      else h += `<button class="ps-more g" data-ps="google">${IC.search}<span>Google で探す<small>押したときだけ Google の検索を使います（回数で料金がかかります）</small></span></button>`;
+      out.innerHTML = h;
+    }
+    async function runOsm() {
+      const q = st.q.trim();
+      if (!q || st.osmBusy) return;
+      if (navigator.onLine === false) { st.osmErr = "オフラインのため、地図の場所は探せません"; draw(); return; }
+      st.osmBusy = true; st.osmErr = ""; draw();
+      try { const res = await osmSearch(q, c); if (st.q.trim() === q) st.osm = res; }
+      catch (e) { st.osmErr = "地図の場所を探せませんでした。少し待ってから、もう一度押してください"; }
+      st.osmBusy = false;
+      if (box.isConnected) draw();
+    }
+    async function runGoogle() {
+      const q = st.q.trim();
+      if (!q || st.gBusy) return;
+      st.gBusy = true; st.gErr = ""; draw();
+      try { const res = await googleSearch(q, c); if (st.q.trim() === q) st.g = res; }
+      catch (e) { st.gErr = "Google の場所検索を使えませんでした（この試作の APIキーでは、Places API (New) がまだ使えないようです）"; }
+      st.gBusy = false;
+      if (box.isConnected) draw();
+    }
+    async function pick(key) {
+      const [src, n] = key.split(":"), i = Number(n);
+      let sp = null;
+      if (src === "app") sp = local[i];
+      else if (src === "osm") sp = st.osm && st.osm[i] ? foundSpot(st.osm[i]) : null;
+      else if (src === "g" && st.g && st.g[i]) {
+        try { sp = foundSpot(await googleResolve(st.g[i])); } catch (e) { toast("Google から場所を取れませんでした"); return; }
+      }
+      if (!sp) return;
+      close(); o.onPick(sp);
+    }
+    $("form", box).addEventListener("submit", (e) => { e.preventDefault(); inp.blur(); runOsm(); });
+    inp.addEventListener("input", () => { st.q = inp.value; st.osm = null; st.g = null; st.osmErr = ""; st.gErr = ""; draw(); });
+    box.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-ps],[data-pick]"); if (!b) return;
+      if (b.dataset.pick) pick(b.dataset.pick);
+      else if (b.dataset.ps === "close") close();
+      else if (b.dataset.ps === "osm") runOsm();
+      else if (b.dataset.ps === "google") runGoogle();
+    });
+    draw();
+    requestAnimationFrame(() => { box.classList.add("show"); inp.focus(); });
+  }
+  // 見つけた場所を地図に出す（探す・つくる・組み直す）。下のシートの上にカードを出し、地図をそこへ動かす
+  function showFound(sp) {
+    state.found = sp.id;
+    if (stage() === "follow") return;
+    setSheet("half"); renderSheet(); drawMap(false);
+    if (!map) return;
+    const size = map.getSize(), y0 = topInset(), y1 = size.y - sheetOver();
+    map.centerOn([sp.lat, sp.lng], Math.max(map.getZoom(), 16), (y0 + y1) / 2 - size.y / 2);
+  }
+  function drawFound(st) {
+    const sp = state.found && spotById[state.found];
+    if (!sp || st === "follow") return;
+    if ((st === "make" || st === "redo") && ed().stops.some((x) => x.spot === sp.id)) return; // 予定に入れたら番号のピンで出す
+    const b = bestRecordFor(sp.id);
+    addPin([sp.lat, sp.lng], { ...divPin("found", IC.flag), title: sp.name }, { half: 16, prio: 60, sp, r: b && b.r, s: b && b.s }, () => { setSheet("half"); $("#sheet-body").scrollTop = 0; }, 2500);
+  }
+  function foundCard() {
+    const sp = state.found && spotById[state.found];
+    const st = stage();
+    if (!sp || st === "follow") return "";
+    const recs = recsAt(sp.id), d = ed(), inPlan = (st === "make" || st === "redo") && d.stops.some((x) => x.spot === sp.id);
+    const src = sp.src === "google" ? "Google で見つけた場所" : sp.src === "osm" ? "OpenStreetMap で見つけた場所" : "登録済みの場所";
+    let acts;
+    if (inPlan) acts = `<span class="found-in">${IC.check}予定に入っています</span>`;
+    else if (st === "make") acts = `${d.stops.length ? `<button class="btn ghost small" data-act="found-first">${IC.flag}最初（出発）にする</button>` : ""}<button class="btn primary small" data-act="found-add">${IC.cal}${d.stops.length ? `${d.stops.length + 1}番に足す` : "1番（出発）にする"}</button>`;
+    else if (st === "redo") acts = `<button class="btn primary small" data-act="found-add">${IC.cal}次に行く場所にする</button>`;
+    else acts = `<button class="btn primary small" data-act="found-make">${IC.cal}予定に入れる</button><button class="btn ghost small" data-act="found-write">${IC.edit}記事を書く</button><button class="btn ghost small" data-act="found-save">${V.saved.some((x) => x.spot === sp.id) ? "登録済み" : "＋ 登録"}</button>`;
+    return `<div class="found">
+      <div class="found-top"><span class="found-ic">${IC.flag}</span><span class="found-tx"><b>${esc(sp.name)}</b><small>${esc(sp.kind)}${sp.addr ? "・" + esc(sp.addr) : ""}</small></span><button class="found-x" data-act="found-close" aria-label="閉じる">${IC.x}</button></div>
+      <div class="found-st">${recs.length ? `<button class="link-btn" data-rec="${recs[0].id}">記事${recs.length}件・「${esc(recs[0].title)}」を読む</button>` : "<span>まだ記事がありません。公開する記事を書くと登録されて、ほかの人も使えるようになります</span>"}<em>${src}</em></div>
+      <div class="found-acts">${acts}</div>
+    </div>`;
+  }
+  function onFound(act) {
+    const sp = state.found && spotById[state.found];
+    if (!sp) return;
+    if (act === "found-close") { state.found = null; renderSheet(); drawMap(false); return; }
+    if (act === "found-save") { toggleSaved(sp.id); renderSheet(); return; }
+    if (act === "found-write") { openWriteAt(sp); return; }
+    if (act === "found-make") {
+      const d = state.draft;
+      if (!d.stops.some((x) => x.spot === sp.id)) { d.stops.push({ spot: sp.id, stay: defaultStay(sp) }); d.dirty = true; }
+      state.found = null; state.fitNext = true;
+      openPlan("make");
+      toast(`${d.stops.length}　${sp.name}を予定に入れました`);
+      return;
+    }
+    const d = ed();
+    if (d.stops.some((x) => x.spot === sp.id)) { toast("もう予定に入っています"); return; }
+    state.found = null;
+    if (act === "found-first") {
+      d.stops.unshift({ spot: sp.id, stay: defaultStay(sp) }); d.dirty = true;
+      toast(`1　${sp.name}を最初（出発の場所）にしました`);
+      drawMap(false); renderSheet(); return;
+    }
+    toggleDraftSpot(sp.id);
   }
 
   /* ---------- 画面の切り替え ---------- */
@@ -2360,7 +3548,14 @@
     const refilter = () => { renderChips(); drawMap(stage() === "explore"); if (stage() === "explore") scheduleArea(); else renderSheet(); };
     $("#chips").addEventListener("click", (e) => { const b = e.target.closest("[data-tag]"); if (!b) return; state.tag = b.dataset.tag || null; refilter(); });
     $("#modes").addEventListener("click", (e) => { const b = e.target.closest("[data-mode]"); if (!b) return; state.mode = b.dataset.mode; refilter(); });
-    $("#stage-bar").addEventListener("click", (e) => { const b = e.target.closest("[data-stage]"); if (b) openPlan(b.dataset.stage); });
+    $("#stage-bar").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-stage]"); if (b) openPlan(b.dataset.stage);
+      if (e.target.closest('[data-act="search"]')) openPlaceSearch({ title: "見つけた場所は、予定に入れられます", onPick: showFound });
+    });
+    // 探す：上の検索の帯で、場所を名前で探す（記事のない場所も）
+    const ts = $("#top-search");
+    ts.addEventListener("click", () => openPlaceSearch({ onPick: showFound }));
+    ts.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlaceSearch({ onPick: showFound }); } });
 
     // 下のシート（探す・つくる・たどる）
     const sb = $("#sheet-body");
@@ -2371,6 +3566,7 @@
       if (t.dataset.mk) onMake(t);
       else if (t.dataset.fl) onFollow(t);
       else if (t.dataset.act === "fit-all") drawMap(true);
+      else if (t.dataset.act.startsWith("found")) onFound(t.dataset.act);
       else if (t.dataset.act) onFollowAct(t.dataset.act);
       else if (t.dataset.rec) openArticle(t.dataset.rec);
     };

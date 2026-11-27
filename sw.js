@@ -4,7 +4,7 @@
  *   オフラインのときは、地図の所にだけ「地図を表示できません」と出る（js/gmap.js）
  * ファイルを変えたら VERSION の数字を上げる（古い保存が入れ替わる）
  */
-const VERSION = "v9";
+const VERSION = "v11";
 const APP_CACHE = "tam-app-" + VERSION;
 const IMG_CACHE = "tam-img-v1"; // 記事の写真（名前を変えない限り中身は変わらないので、保存を先に使う）
 const OLD_CACHES = ["tam-tiles-v1"]; // 前の版で保存していた国土地理院の地図タイル（もう使わないので消す）
@@ -111,6 +111,7 @@ self.addEventListener("fetch", (e) => {
   }
 
   // アプリ本体：ネットにつながれば最新を使い、つながらなければ保存したものを使う
+  // （ほかのサイト、たとえば場所を名前で探すときの OpenStreetMap は、ここに来ない＝横取りも保存もしない）
   if (url.origin === self.location.origin) {
     e.respondWith(
       fetch(req)

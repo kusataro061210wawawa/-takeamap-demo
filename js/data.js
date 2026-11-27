@@ -6,46 +6,66 @@
 (function () {
   const TAGS = ["図書館建築", "旅行", "グルメ", "ラーメン", "歴史", "カフェ", "古着", "聖地巡礼", "自然", "美術館"];
 
+  /* art：アカウントの絵（js/app.js の ART。本番はその人が選んだ写真やアイコンになる）
+     official：自治体・観光局・店の公式アカウント（ここにあるものは、すべてデモ用の架空のアカウント） */
   const writers = [
     {
-      id: "kusataro", name: "くさたろ", initial: "くさ", color: "#123D2B",
+      id: "kusataro", name: "くさたろ", initial: "くさ", color: "#123D2B", art: "books",
       bio: "全国の図書館を、建築目当てで巡っています。光の入り方と、本棚の並べ方が好き。",
       mainTag: "図書館建築",
       membership: { name: "図書館建築ノート", price: 300 },
       stats: { records: { "図書館建築": 32, "旅行": 6 }, favorites: 1240, retention: 92, wentFromArticles: 380 },
     },
     {
-      id: "yu", name: "ゆう", color: "#56859C",
+      id: "yu", name: "ゆう", color: "#56859C", art: "boat",
       bio: "週末は1日かけて街を歩きます。海と船、それから昼ごはんで選ぶ旅。大宮のラーメンも食べ歩き中。",
       mainTag: "旅行",
       stats: { records: { "旅行": 41, "ラーメン": 14, "カフェ": 7 }, favorites: 860, retention: 88, wentFromArticles: 214 },
     },
     {
-      id: "minami", name: "みなみ", color: "#B94A28",
+      id: "minami", name: "みなみ", color: "#B94A28", art: "ramen",
       bio: "埼玉のラーメンを系統ごとに食べ歩き。煮干しが好き。",
       mainTag: "ラーメン",
       stats: { records: { "ラーメン": 57, "カフェ": 4 }, favorites: 2010, retention: 90, wentFromArticles: 655 },
     },
     {
-      id: "official", name: "ちいき観光ナビ（架空）", color: "#E86B45", official: true,
+      id: "official", name: "ちいき観光ナビ（架空）", color: "#E86B45", official: true, art: "flag",
       bio: "地域の特集とスタンプラリーをお届けする、自治体の公式アカウント（デモ用の架空のアカウントです）。",
       mainTag: "旅行",
       stats: { records: { "旅行": 12 }, favorites: 530, retention: 81, wentFromArticles: 1020 },
     },
     {
-      id: "haru", name: "はる", color: "#626E66",
+      id: "dmo-omiya", name: "大宮まちなか観光局（架空）", color: "#C2562F", official: true, art: "cityhall",
+      bio: "大宮の街歩きを案内する観光局の公式アカウント（デモ用の架空のアカウントです）。地元の書き手と組んだ特集もお届けします。",
+      mainTag: "旅行",
+      stats: { records: { "旅行": 18, "ラーメン": 3 }, favorites: 940, retention: 84, wentFromArticles: 1460 },
+    },
+    {
+      id: "dmo-hokuriku", name: "北陸まちあるき観光局（架空）", color: "#3E6E8E", official: true, art: "tram",
+      bio: "富山・金沢の街歩きと、趣味で巡る旅を紹介する観光局の公式アカウント（デモ用の架空のアカウントです）。",
+      mainTag: "旅行",
+      stats: { records: { "旅行": 26, "図書館建築": 4 }, favorites: 1310, retention: 86, wentFromArticles: 2240 },
+    },
+    {
+      id: "shop-akari", name: "煮干しそば 灯（店の公式・架空）", color: "#8E3A1E", official: true, shop: true, art: "bowl",
+      bio: "大宮駅の近くの煮干しそばの店の公式アカウント（デモ用の架空の店です）。季節の一杯と、空いている時間をお知らせします。",
+      mainTag: "ラーメン",
+      stats: { records: { "ラーメン": 6 }, favorites: 380, retention: 79, wentFromArticles: 410 },
+    },
+    {
+      id: "haru", name: "はる", color: "#626E66", art: "shirt",
       bio: "古着屋と喫茶店をはしごする休日。",
       mainTag: "古着",
       stats: { records: { "古着": 23, "カフェ": 18 }, favorites: 410, retention: 85, wentFromArticles: 96 },
     },
     {
-      id: "sora", name: "そら", color: "#56859C",
+      id: "sora", name: "そら", color: "#7A5C9E", art: "camera",
       bio: "映画とアニメの舞台を、同じ時間帯に歩くのが好き。",
       mainTag: "聖地巡礼",
       stats: { records: { "聖地巡礼": 29 }, favorites: 720, retention: 87, wentFromArticles: 240 },
     },
     {
-      id: "aoi", name: "あおい", color: "#2C5F2D",
+      id: "aoi", name: "あおい", color: "#2C5F2D", art: "mountain",
       bio: "低い山と、湧き水のある公園。",
       mainTag: "自然",
       stats: { records: { "自然": 19, "美術館": 5 }, favorites: 300, retention: 83, wentFromArticles: 70 },
@@ -131,7 +151,7 @@
       lead: "富山市は、路面電車を軸に、暮らしに必要なものを街の中心に集める「コンパクトシティ」のまちづくりで知られています。その中心部は、実際に歩いてみるとどうなっているのか。朝の富山駅から、隈研吾さんが設計した図書館まで、6か所を1日かけて回りました。",
       spots: [
         {
-          spot: "toyama-st", stay: 20, rating: 2, head: "路面電車が街へ走り出す、コンパクトシティの入口",
+          spot: "toyama-st", stay: 20, rating: 2, tags: ["駅"], head: "路面電車が街へ走り出す、コンパクトシティの入口",
           note: "路面電車が駅から街へ走っていく。コンパクトシティの入口。",
           text: [
             "駅のまわりはきれいに整っていて、規模は思っていたより小さめ。路面電車（LRT）が駅から市街へ向かって走っていく様子が珍しくて、思わず立ち止まって眺めてしまいました。",
@@ -140,7 +160,7 @@
           photos: [P("toyama-st-1", "朝の富山駅"), P("toyama-st-2", "駅から市街へ向かう路面電車")],
         },
         {
-          spot: "kansui", stay: 45, rating: 3, head: "運河をまたぐ橋の上から、立山連峰をのぞく。散歩が最高",
+          spot: "kansui", stay: 45, rating: 3, tags: ["自然"], head: "運河をまたぐ橋の上から、立山連峰をのぞく。散歩が最高",
           note: "天門橋の上から立山連峰。朝の散歩が最高。",
           text: [
             "富岩運河を囲むように広がる、大きく開けた公園です。運河をまたぐ天門橋の上からは、晴れていれば立山連峰がはっきり見えます。朝の澄んだ空気の中で見る山並みは格別でした。",
@@ -149,7 +169,7 @@
           photos: [P("kansui-1", "天門橋の上から。奥に立山連峰"), P("kansui-2", "運河沿いの遊歩道"), P("kansui-3", "スターバックス コーヒー 富山環水公園店")],
         },
         {
-          spot: "yonekyu", stay: 45, rating: 3, head: "鱒寿しはここで決まり。日本庭園を前に、緑茶で一息",
+          spot: "yonekyu", stay: 45, rating: 3, tags: ["グルメ"], head: "鱒寿しはここで決まり。日本庭園を前に、緑茶で一息",
           note: "一段2,000円の鱒寿し。日本庭園を前に緑茶で一息。",
           text: [
             "環水公園から歩いてすぐのところにあります。平日の朝9時に店内に入りましたが、この時間でも5分に1人くらいのペースで、持ち帰り用の鱒寿しを買いに来るお客さんが続いていました。",
@@ -159,7 +179,7 @@
           photos: [P("yonekyu-1", "鱒寿しと緑茶"), P("yonekyu-2", "店内から見える日本庭園"), P("yonekyu-3", "店の外観")],
         },
         {
-          spot: "toyama-castle", stay: 90, rating: 3, head: "戦後復興の象徴として建てられた城",
+          spot: "toyama-castle", stay: 90, rating: 3, tags: ["歴史"], head: "戦後復興の象徴として建てられた城",
           note: "1954年、戦後復興の象徴として建てられた城。中は郷土博物館。",
           text: [
             "富山駅から南へ500mほど。この城は1954年、戦後復興の象徴として建てられました。",
@@ -169,7 +189,7 @@
           photos: [P("castle-1", "正面から見た富山城"), P("castle-2", "城址公園の赤い橋"), P("castle-3", "庭園の池"), P("castle-4", "「AMAZING TOYAMA」のフレーム越しに")],
         },
         {
-          spot: "itosho", stay: 45, rating: 3, head: "地元に愛されてきた、もつ煮込みうどんの店",
+          spot: "itosho", stay: 45, rating: 3, tags: ["グルメ"], head: "地元に愛されてきた、もつ煮込みうどんの店",
           note: "54年続く富山のソウルフード、もつ煮込みうどん。",
           text: [
             "糸庄は、富山のソウルフードとして54年間愛され続けている、もつ煮込みうどんの店です。富山駅からは少し離れていますが、平日の昼でも数十人のお客さんが訪れていました。",
@@ -179,7 +199,7 @@
           photos: [P("itosho-1", "もつ煮込みうどん"), P("itosho-2", "店の外観")],
         },
         {
-          spot: "lib-toyama", stay: 90, rating: 3, head: "木材×鏡×大きな吹き抜け。隈研吾さん設計の美しい空間",
+          spot: "lib-toyama", stay: 90, rating: 3, tags: ["図書館建築"], head: "木材×鏡×大きな吹き抜け。隈研吾さん設計の美しい空間",
           note: "隈研吾さん設計。杉の吹き抜けを、エスカレーターで上りながら。",
           text: [
             "富山で図書館建築を見るなら、ここは外せません。TOYAMAキラリの中にあり、設計は隈研吾さん。立山連峰を思わせる御影石・ガラス・アルミの外観と、富山県産の杉材を生かした大きな吹き抜けが特徴です。",
@@ -310,7 +330,7 @@
       lead: "海軍の街・呉で船の博物館を2つ回り、元祖の呉冷麺を食べてから、宮島の厳島神社へ。広島の海を1日で味わうルートです。",
       spots: [
         {
-          spot: "kure-yamato", stay: 60, rating: 3, head: "戦艦「大和」の模型は圧巻",
+          spot: "kure-yamato", stay: 60, rating: 3, tags: ["歴史"], head: "戦艦「大和」の模型は圧巻",
           note: "10分の1の戦艦「大和」の模型は圧巻。",
           text: [
             "まずは呉駅から歩いてすぐの大和ミュージアムへ。館内に入って最初に目に飛び込んでくるのが、10分の1サイズの戦艦「大和」の模型です。その大きさと細かさは、まさに圧巻のひと言。",
@@ -319,7 +339,7 @@
           photos: [P("kure-yamato-1", "10分の1サイズの戦艦「大和」")],
         },
         {
-          spot: "kure-kujira", stay: 45, rating: 3, head: "本物の潜水艦の中に入れる",
+          spot: "kure-kujira", stay: 45, rating: 3, tags: ["歴史"], head: "本物の潜水艦の中に入れる",
           note: "本物の潜水艦の中に入れる。",
           text: [
             "大和ミュージアムのすぐ近くにある、海上自衛隊呉史料館。愛称の「てつのくじら館」のとおり、本物の潜水艦が丸ごと陸に置かれていて、その中に実際に入ることができます。",
@@ -328,7 +348,7 @@
           photos: [P("kure-kujira-1", "陸に置かれた潜水艦")],
         },
         {
-          spot: "kure-chinraiken", stay: 20, rating: 3, head: "ここの冷麺は絶品",
+          spot: "kure-chinraiken", stay: 20, rating: 3, tags: ["グルメ"], head: "ここの冷麺は絶品",
           note: "呉冷麺の元祖。ここの冷麺は絶品。",
           text: [
             "昼は、呉のご当地グルメ「呉冷麺」の元祖の店へ。店先には「SINCE 1955」の文字があり、長く続く老舗です。",
@@ -337,7 +357,7 @@
           photos: [P("kure-chinraiken-1", "呉冷麺"), P("kure-chinraiken-2", "店の入口とメニュー")],
         },
         {
-          spot: "itsukushima", stay: 30, rating: 3, head: "干潮の時間に行きましょう",
+          spot: "itsukushima", stay: 30, rating: 3, tags: ["歴史", "自然"], head: "干潮の時間に行きましょう",
           note: "干潮の時間に行くと、大鳥居の足もとまで歩ける。",
           text: [
             "最後は宮島の厳島神社へ。呉からは電車とフェリーを乗り継いで向かいます。",
@@ -427,6 +447,44 @@
 
     // 公式：スタンプラリー（架空）
     { id: "o1", writer: "official", type: "route", official: true, stamp: true, title: "大宮 歴史と鉄道のスタンプラリー（架空の企画）", mainTag: "旅行", tags: ["旅行", "歴史"], date: "2026-11-01", start: "10:00", spots: [{ spot: "hikawa", stay: 40, rating: 3, note: "スタンプ1：参道の入口" }, { spot: "omiya-park", stay: 30, rating: 3, note: "スタンプ2：公園の池のほとり" }, { spot: "bonsai", stay: 50, rating: 3, note: "スタンプ3：盆栽の庭" }, { spot: "railway", stay: 90, rating: 3, note: "スタンプ4：ゴール" }], went: 310 },
+
+    /* 公式：自治体・観光局・店の記事（すべて架空のアカウント）。読むでは先頭にせず、ほかの記事のあいだに少しだけ混ぜる。
+       collab：その趣味で信頼されている書き手と組んだ特集（書き手の名前を出す） */
+    {
+      id: "o2", writer: "dmo-omiya", type: "route", official: true, title: "雨の日の大宮は、屋内で半日。図書館からブックカフェ、鉄道博物館へ", mainTag: "旅行", tags: ["旅行", "図書館建築", "カフェ"], date: "2026-11-10", start: "10:00",
+      lead: "雨の予報の日でも、大宮には屋根の下で楽しめる場所がそろっています。駅から歩ける図書館とブックカフェで午前をすごし、午後は鉄道博物館へ。傘をさす時間が短い順に並べました。",
+      spots: [
+        { spot: "omiya-lib", stay: 50, rating: 3, tags: ["図書館建築"], head: "朝は駅前の図書館で、今日の予定を決める", note: "駅から近く、雨の朝でも立ち寄りやすい。", text: ["大宮駅から歩いてすぐの図書館です。明るい閲覧席が多く、雨の日の朝に、ゆっくり今日の予定を立てるのにぴったりです。", "地元の歴史や鉄道の本の棚もあるので、午後に行く鉄道博物館の予習をしておくのもおすすめです。"] },
+        { spot: "c-hidamari", stay: 45, rating: 3, tags: ["カフェ"], head: "壁一面の本棚のカフェで、ひと休み", note: "本を読みながら、雨がやむのを待てる。", text: ["図書館から数分の、本棚に囲まれたカフェです。雨の音を聞きながら、コーヒーと一緒に本を読んで過ごせます。"] },
+        { spot: "railway", stay: 120, rating: 3, tags: ["歴史"], head: "午後は鉄道博物館で、じっくり2時間", note: "実物の車両がずらり。閉館は早めなので注意。", text: ["午後は、ニューシャトルで1駅の鉄道博物館へ。館内はほとんど屋内なので、天気を気にせず楽しめます。", "閉館は17時。入館は少し早めに。"] },
+      ],
+      went: 128,
+    },
+    {
+      id: "o3", writer: "dmo-omiya", type: "route", official: true, collab: "minami", title: "【特集】煮干しの書き手・みなみさんと歩く、大宮の煮干しラーメン3軒", mainTag: "ラーメン", tags: ["ラーメン", "グルメ"], date: "2026-11-18", start: "11:00",
+      lead: "大宮まちなか観光局と、埼玉のラーメンを系統ごとに食べ歩いている書き手・みなみさんが組んだ特集です。煮干しのラーメンを、澄んだ一杯から濃い一杯へ。昼に1軒ずつ、3回に分けて回るのがおすすめです。",
+      spots: [
+        { spot: "r-akari", stay: 40, rating: 3, tags: ["ラーメン"], head: "1杯目は、駅からすぐの澄んだ煮干し", note: "みなみさん：「最初の一杯はここ。澄んだスープで煮干しの香りがわかる」", text: ["みなみさん：「煮干しラーメンが初めての人にも、まずここをすすめます。澄んだスープで、煮干しの香りがまっすぐ届きます」"] },
+        { spot: "r-nagi", stay: 40, rating: 3, tags: ["ラーメン"], head: "2杯目は、昼だけ開く、やさしい煮干し", note: "みなみさん：「昼だけの営業。土曜の昼がねらい目」", text: ["みなみさん：「昼だけの営業なので、予定に入れるなら11時台に。やさしい味で、2杯目でも重くありません」"] },
+        { spot: "r-shirogane", stay: 40, rating: 2, tags: ["ラーメン"], head: "3杯目は、少し歩いて、濃い煮干しへ", note: "みなみさん：「濃いめが好きなら最後にここ」", text: ["みなみさん：「駅から少し歩きますが、濃い煮干しが好きな人には、ここで締めてほしい」"] },
+      ],
+      went: 236,
+    },
+    {
+      id: "o4", writer: "dmo-hokuriku", type: "route", official: true, collab: "kusataro", title: "【特集】図書館建築の書き手と巡る、富山・金沢の図書館", mainTag: "図書館建築", tags: ["図書館建築", "旅行"], date: "2026-10-30", start: "09:30", cover: "kirari-1",
+      lead: "北陸まちあるき観光局が、全国の図書館を建築目当てで巡っている書き手・くさたろさんと組んだ特集です。富山の駅前から金沢の海辺まで、建築を見に行く価値のある図書館を3つ選びました（写真：くさたろ）。",
+      spots: [
+        { spot: "lib-toyama", stay: 90, rating: 3, tags: ["図書館建築"], head: "富山：杉の吹き抜けを、エスカレーターで上る", note: "隈研吾さん設計。ガラス美術館と一緒に。", text: ["くさたろさん：「エスカレーターで上りながら、斜めに走る木のルーバー越しの景色が変わっていくのを見てほしい」"], photos: [{ src: "kirari-1", cap: "杉のルーバーが走る大きな吹き抜け（写真：くさたろ）" }] },
+        { spot: "lib-ishikawa", stay: 120, rating: 3, tags: ["図書館建築"], head: "金沢：本のページをめくる瞬間がモチーフの、円形ドーム", note: "上の階から見下ろすと、円を描く本棚が一望できる。", text: ["くさたろさん：「金沢の旅行プランに入れる人が多いのも納得。上の階の手すりぎわから見下ろしてみてください」"], photos: [{ src: "ishikawa-1", cap: "円形ドームの吹き抜け（写真：くさたろ）" }] },
+        { spot: "lib-umimirai", stay: 60, rating: 3, tags: ["図書館建築"], head: "金沢の海辺：6,000の穴から光が差し込む、白い箱", note: "バスで20分。SFのような空間。", text: ["くさたろさん：「明るさを抑えた館内に、外壁の穴から光が差し込む。ほかでは味わえない空間です」"], photos: [{ src: "umimirai-1", cap: "小さな穴がたくさん空いた白い外壁（写真：くさたろ）" }] },
+      ],
+      went: 342,
+    },
+    {
+      id: "o5", writer: "shop-akari", type: "spot", official: true, title: "冬だけの「焼き干し煮干しそば」をはじめました", mainTag: "ラーメン", tags: ["ラーメン"], date: "2026-11-20",
+      spots: [{ spot: "r-akari", stay: 40, rating: 3, note: "12月から2月までの限定。平日の14時台が空いています。", text: ["いつもの澄んだ煮干しに、焼いた煮干しの香ばしさを重ねた、冬だけの一杯です（12月〜2月）。", "お昼の12時台は混み合います。平日の14時台なら、待たずに入れることが多いです。"] }],
+      went: 57,
+    },
 
     // その他のタグ（AIで作った仮の記録）
     { id: "h1", writer: "haru", type: "route", title: "下北沢、古着と喫茶のはしご", mainTag: "古着", tags: ["古着", "カフェ"], date: "2026-10-05", start: "13:00", spots: [{ spot: "shimokita-1", stay: 90, rating: 3, note: "細い路地ほど掘り出し物がある。" }, { spot: "shimokita-2", stay: 45, rating: 2, note: "歩き疲れたらここ。" }], went: 18 },

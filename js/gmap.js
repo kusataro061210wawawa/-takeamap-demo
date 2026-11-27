@@ -208,5 +208,11 @@
     });
   }
 
-  window.GM = { create };
+  /* 場所を名前で探す（Places API (New) の Autocomplete と Place Details）。
+     「Google で探す」を押したときだけ読み込む。見つけた場所の情報は、どこにも保存しない（画面を閉じたら消える） */
+  function places() {
+    return load().then(() => google.maps.importLibrary("places"));
+  }
+
+  window.GM = { create, places };
 })();
