@@ -3587,12 +3587,17 @@
     return D.spots.filter((sp) => !sp.temp && [sp.name, sp.kind, sp.style, sp.addr, ...(sp.tags || [])].some((x) => x && kana(x).includes(k)))
       .sort((a, b) => R.distM(a, at) - R.distM(b, at)).slice(0, 8);
   }
-  // 探す画面。o：{ title（何に使うか）, onPick(場所) }
+  /* 探す画面。o：{ title（何に使うか）, onPick(場所), onMap }
+     onMap（探すの上の検索）：探すの地図の上に重ねて出す。上のタグ・お気に入りなどの絞り込みは隠し、その所に検索と案内（結果）を出す。
+     下のシートはいちばん小さくし、下のタブ（読む・探す・予定…）はそのまま。地図の何もない所を押すと閉じる */
+  let psClose = null; // いま開いている探す画面を閉じる（下のタブで画面を移ったときにも閉じる）
   function openPlaceSearch(o) {
+    if (psClose) psClose(true);
     const old = $("#ps"); if (old) old.remove();
     const c = map ? map.getCenter() : OMIYA;
+    const onMap = !!o.onMap && !!$("#view-map");
     const box = document.createElement("div");
-    box.className = "ps-back"; box.id = "ps";
+    box.className = "ps-back" + (onMap ? " on-map" : ""); box.id = "ps";
     box.innerHTML = `<div class="ps" role="dialog" aria-label="場所を名前で探す">
       <form class="ps-bar" autocomplete="off">
         <button type="button" class="ps-x" data-ps="close" aria-label="閉じる">${IC.back}</button>
@@ -3602,16 +3607,27 @@
       ${o.title ? `<div class="ps-for">${esc(o.title)}</div>` : ""}
       <div class="ps-body" id="ps-body"></div>
     </div>`;
-    $("#app").appendChild(box);
+    (onMap ? $("#view-map") : $("#app")).appendChild(box);
     const inp = $("#ps-in", box), out = $("#ps-body", box);
     const st = { q: "", osm: null, osmBusy: false, osmErr: "", g: null, gBusy: false, gErr: "" };
     let local = [];
-    const close = () => box.remove();
+    // 地図の上に出すとき：上の絞り込みを隠し、シートをいちばん小さく。閉じたら元の高さに戻す（場所を選んだときは、見つけた場所のカードを出すので戻さない）
+    const sheetBefore = onMap ? ["peek", "half", "full"].find((k) => $("#sheet").classList.contains(k)) : null;
+    if (onMap) { $("#view-map").classList.add("searching"); setSheet("peek", false); }
+    const close = (keepSheet) => {
+      box.remove();
+      if (psClose === close) psClose = null;
+      if (!onMap) return;
+      $("#view-map").classList.remove("searching");
+      if (!keepSheet && sheetBefore && sheetBefore !== "peek") setSheet(sheetBefore, false);
+    };
+    psClose = close;
     const distText = (m) => (m == null ? "" : m < 1000 ? `${Math.round(m / 10) * 10}m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)}km`);
     const row = (key, src, name, sub, tag) => `<button class="ps-row" data-pick="${key}"><span class="ps-ic ${src}">${src === "app" ? IC.pin : IC.search}</span><span class="ps-tx"><b>${esc(name)}</b><small>${esc(sub)}</small></span>${tag ? `<span class="ps-tag">${esc(tag)}</span>` : ""}</button>`;
     function draw() {
       const q = st.q.trim();
       local = localMatches(q, c);
+      out.classList.toggle("has-res", !!q); // 地図の上に出すとき、結果は白い板の上に
       if (!q) {
         out.innerHTML = `<div class="ps-hint">${IC.pin}<div><b>記事のある場所</b>は、打つとすぐ出ます。<br><b>記事のない場所</b>（初めて行く所・コンビニ・ホテルなど）は「探す」で地図から探します。<br>それでも見つからないときは、Google でも探せます。</div></div>`;
         return;
@@ -3658,11 +3674,12 @@
         try { sp = foundSpot(await googleResolve(st.g[i])); } catch (e) { toast("Google から場所を取れませんでした"); return; }
       }
       if (!sp) return;
-      close(); o.onPick(sp);
+      close(true); o.onPick(sp);
     }
     $("form", box).addEventListener("submit", (e) => { e.preventDefault(); inp.blur(); runOsm(); });
     inp.addEventListener("input", () => { st.q = inp.value; st.osm = null; st.g = null; st.osmErr = ""; st.gErr = ""; draw(); });
     box.addEventListener("click", (e) => {
+      if (onMap && (e.target === box || e.target.classList.contains("ps"))) { close(); return; } // 地図の何もない所を押したら閉じる
       const b = e.target.closest("[data-ps],[data-pick]"); if (!b) return;
       if (b.dataset.pick) pick(b.dataset.pick);
       else if (b.dataset.ps === "close") close();
@@ -3737,6 +3754,7 @@
   const planTab = () => $("#tab-plan");
   function closePlanMenu() { planTab().classList.remove("open"); }
   function switchView(v) {
+    if (psClose) psClose(true);
     state.view = v; closePanels(); closePlanMenu();
     if (v !== "map") state.place = null; // 探すを離れたら、場所の絞り込みはやめる
     const sec = v === "plan" ? "map" : v; // 予定（つくる／たどる）は探すと同じ地図の画面を使う
@@ -3793,8 +3811,8 @@
     });
     // 探す：上の検索の帯で、場所を名前で探す（記事のない場所も）
     const ts = $("#top-search");
-    ts.addEventListener("click", () => openPlaceSearch({ onPick: showFound }));
-    ts.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlaceSearch({ onPick: showFound }); } });
+    ts.addEventListener("click", () => openPlaceSearch({ onPick: showFound, onMap: true }));
+    ts.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlaceSearch({ onPick: showFound, onMap: true }); } });
 
     // 下のシート（探す・つくる・たどる）
     const sb = $("#sheet-body");
