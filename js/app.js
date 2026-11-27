@@ -3490,14 +3490,14 @@
 
   /* ---------- 場所を名前で探す（探す・つくる・組み直す・書く画面の「場所」で使う） ----------
      1) 記事のある場所（このアプリに登録済み）：打つとすぐ出る・無料
-     2) 地図の場所（OpenStreetMap の Nominatim）：「探す」を押したときだけ・無料。1秒に1回まで、という決まりを守る
+     2) 地図の場所（OpenStreetMap の Nominatim）：「探す」を押したときだけ。日本全体から探す。1秒に1回まで、という決まりを守る
      3) Google（Places API (New)）：「Google で探す」を押したときだけ。回数で料金がかかるので、ほかで見つからないときに使う
      見つけた場所は、この端末のメモリにだけ置く（localStorage・サービスワーカーには入れない）。
      公開する記事を書くと、その場所は登録されて、ほかの人も地図で使えるようになる */
   const kana = (s) => String(s || "").normalize("NFKC").toLowerCase().replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/\s+/g, "");
   const OSM_KIND = [
     [/^shop:convenience$/, "コンビニ", true], [/^tourism:(hotel|hostel|guest_house|motel|apartment)$/, "ホテル", true],
-    [/^(railway|public_transport):(station|halt|stop_position|platform)$/, "駅", true], [/^amenity:cafe$/, "カフェ", true],
+    [/^(railway|public_transport):(station|halt|stop|stop_position|platform)$/, "駅", true], [/^amenity:cafe$/, "カフェ", true],
     [/^amenity:(restaurant|fast_food|food_court|pub|bar|izakaya)$/, "グルメ", true], [/^amenity:library$/, "図書館", true],
     [/^tourism:museum$/, "博物館", true], [/^(tourism:gallery|amenity:arts_centre)$/, "美術館", true],
     [/^leisure:(park|garden)$/, "公園", false], [/^natural:(peak|volcano)$/, "山", false], [/^natural:(beach|bay)$/, "海", false],
@@ -3538,18 +3538,32 @@
     const br = nd["branch:ja"] || nd.branch || "";
     return br && !base.includes(br) ? `${base} ${br}` : base;
   }
+  /* 日本全体から探す（2026-11-27。前は地図のまわり10kmだけで探し、何か見つかると全国を探さなかったので、「東京駅」で大宮の交番などが出ていた）。
+     地図のまわり（10km ほど）は先に並べてもらう（viewbox。bounded は付けないので、範囲の外も出る）。下の「もう1回」も見る */
   async function osmSearch(q, c) {
-    const d = 0.12; // まず地図のまわり（10km ほど）で。なければ日本全体で
-    let list = await osmFetch({ q, viewbox: [c[1] - d, c[0] + d, c[1] + d, c[0] - d].map((v) => v.toFixed(4)).join(","), bounded: "1" });
-    if (!list.length) list = await osmFetch({ q });
-    const at = { lat: c[0], lng: c[1] };
-    return list.map((x) => ({
+    const d = 0.12, near = { viewbox: [c[1] - d, c[0] + d, c[1] + d, c[0] - d].map((v) => v.toFixed(4)).join(","), bounded: "0" };
+    // 通路・階段・道や、土地の使い方（「東京駅」という名前の通路など）は、行く場所ではないので外す。バス停は残す
+    const isPlace = (x) => !(x.category === "highway" && x.type !== "bus_stop") && x.category !== "landuse";
+    const qt = q.trim(), base = qt.replace(/\s*駅$/, ""), isSt = !!base && base !== qt;
+    let raw = (await osmFetch({ q: qt, limit: "20", ...near })).filter(isPlace);
+    // もう1回たずねる（1秒に1回の決まりがあるので、全部で2回まで）
+    //  「〇〇駅」：OpenStreetMap の駅は「東京」のように「駅」の付かない名前が多く、「東京駅」では通路ばかりが出る。「駅」を外した名前で駅を探す
+    //  ほか：ローソンのように同じ名前の店がたくさんあると、日本全体からでは数件しか返らないので、地図のまわり（範囲の中だけ）でも探す
+    const more = isSt
+      ? (await osmFetch({ q: base, layer: "poi", limit: "10", ...near }))
+        .filter((x) => /^(railway:(station|halt|stop)|public_transport:station)$/.test(`${x.category}:${x.type}`))
+      : (await osmFetch({ q: qt, limit: "20", ...near, bounded: "1" })).filter(isPlace);
+    const have = new Set(raw.map((x) => x.osm_type + x.osm_id));
+    raw = [...more.filter((x) => !have.has(x.osm_type + x.osm_id)), ...raw];
+    const at = { lat: c[0], lng: c[1] }, kq = kana(qt);
+    // 名前が探した言葉と同じもの → 名前に含むもの → そのほか。同じ所は地図の真ん中から近い順（「〇〇駅」で探したときは駅を先に）
+    const rank = (p) => (kana(p.name) === kq ? 0 : kana(p.name).includes(kq) ? 1 : 2) - (isSt && p.kind === "駅" ? 0.5 : 0);
+    return raw.map((x) => ({
       src: "osm", name: osmName(x), lat: Number(x.lat), lng: Number(x.lon),
       addr: jpAddr(x.address, x.display_name), ...kindOf(OSM_KIND, `${x.category}:${x.type}`),
     })).filter((p) => p.name && Number.isFinite(p.lat) && Number.isFinite(p.lng))
       .map((p) => ({ ...p, name: p.kind === "駅" && !/駅$/.test(p.name) ? p.name + "駅" : p.name, dist: R.distM(p, at) })) // 「大宮」→「大宮駅」
-      .sort((a, b) => a.dist - b.dist); // 地図の真ん中から近い順
-
+      .sort((a, b) => rank(a) - rank(b) || a.dist - b.dist).slice(0, 10);
   }
   let gLib = null;
   async function googleSearch(q, c) {
