@@ -84,6 +84,7 @@
     foot: icf('<ellipse cx="8.2" cy="12.4" rx="2.7" ry="4.3" transform="rotate(-14 8.2 12.4)"/><ellipse cx="7.2" cy="19.3" rx="1.9" ry="1.7"/><ellipse cx="15.8" cy="6.6" rx="2.7" ry="4.3" transform="rotate(14 15.8 6.6)"/><ellipse cx="16.8" cy="13.5" rx="1.9" ry="1.7"/>'),
     reader: icf('<circle cx="12" cy="7.4" r="4.1"/><path d="M3.8 21.5c0-4.9 3.7-8.4 8.2-8.4s8.2 3.5 8.2 8.4z"/>'),
     doc: ic('<path d="M6.5 3.5h7.5l4 4v13h-11.5z"/><path d="M13.5 3.5v4.5h4.5M9.5 12.5h5M9.5 16h5"/>'),
+    read: ic('<path d="M12 7c-2-1.6-5-2.2-8-1.7v13c3-.5 6 .1 8 1.7 2-1.6 5-2.2 8-1.7v-13c-3-.5-6 .1-8 1.7z"/><path d="M12 7v13"/>'), // 読む（下のタブと同じ本）
     heartf: icf('<path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0112 7.3a4.3 4.3 0 017.5 2.5C19.5 15.4 12 20 12 20z"/>'), // いいね（塗り）
   };
   const VIS = [["public", "公開"], ["member", "メンバー限定"], ["private", "非公開"]];
@@ -229,7 +230,7 @@
      前の版でこの端末に入れた Map Tiles API のキーが残っていれば消す */
   try { localStorage.removeItem("tam-google-key"); } catch (e) { /* なくてもよい */ }
   // ピンの見た目：{ html, size, anchor }（anchor：地図の位置に合わせる、ピンの中の点）
-  const PIN_SIZE = { fav: 26, official: 26, mine: 22, saved: 20, other: 16, num: 28, found: 32, off: 12 }; // off：タグに関係のない、ルートの途中の場所
+  const PIN_SIZE = { fav: 26, official: 26, mine: 22, saved: 20, other: 22, num: 28, found: 32, off: 12 }; // off：タグに関係のない、ルートの途中の場所
   function divPin(cls, inner, extra = "") {
     const n = PIN_SIZE[cls.split(" ")[0]] || 22;
     return { html: `<div class="pin ${cls}" style="${extra}">${inner || ""}</div>`, size: [n, n], anchor: [n / 2, n / 2] };
@@ -255,21 +256,47 @@
     const h = hashOf(r.id);
     return Math.round((r.went || 0) * (1.8 + (h % 23) / 10)) + 12 + (h % 47);
   }
-  /* いいね：読んだ人が「行ってみたい」と思った記事に付ける、その人だけの印（V.liked：記事の id）。
-     いいねの数は読む人には見せない。書いた人だけが、自分の記事の「行った」と「いいね」の数を見られる。
-     地図では、いいねした記事の場所のピンのふちをピンクにし、まだいいねしていない場所のピンは色をうすくする */
-  const isLiked = (r) => !!r && V.liked.includes(r.id);
-  const likesOf = (r) => r.likes || 0; // 書いた人にだけ見せる数
+  /* いいね：読んだ人が「行ってみたい」と思った場所に付ける、その人だけの印。
+     2026-11-27 から場所ごと（V.likes：「記事の id|場所の id」）。ルートの記事は、場所ごとの ♡ でその場所だけに付けられ、
+     記事の ♡（上と下）は、その記事の場所をまとめて付け外しする。こうすると、いくつもの場所をまとめた記事からも、場所ごとに取り出せる。
+     いいねの数は読む人には見せない。書いた人だけが、自分の記事の「行った」と「いいね」の数（記事のどこかにいいねした人・場所ごとの人）を見られる。
+     地図では、いいねした場所のピンのふちをピンクにし、まだいいねしていない場所のピンは色をうすくする */
+  const lkKey = (r, spotId) => `${r.id}|${spotId}`;
+  // はじめのデータ：liked は記事ごと（その記事の場所すべて）、likedSpots は場所ごと（「記事の id|場所の id」）
+  V.likes = [...D.records.flatMap((r) => ((V.liked || []).includes(r.id) ? r.spots.map((x) => lkKey(r, x.spot)) : [])), ...(V.likedSpots || [])];
+  const isSpotLiked = (r, spotId) => !!r && V.likes.includes(lkKey(r, spotId));
+  const likedIn = (r) => r.spots.filter((x) => isSpotLiked(r, x.spot)); // その記事でいいねした場所
+  const isLiked = (r) => !!r && r.spots.some((x) => isSpotLiked(r, x.spot)); // その記事のどこかにいいねした
+  const allLiked = (r) => !!r && r.spots.every((x) => isSpotLiked(r, x.spot)); // その記事の場所すべてにいいねした
+  const likesOf = (r) => r.likes || 0; // 書いた人にだけ見せる数（記事のどこかにいいねした人）
   function likedSpots() {
     const set = new Set();
-    D.records.forEach((r) => { if (isLiked(r)) r.spots.forEach((x) => set.add(x.spot)); });
+    D.records.forEach((r) => r.spots.forEach((x) => { if (isSpotLiked(r, x.spot)) set.add(x.spot); }));
     return set;
   }
+  // ids の場所のいいねを付ける／外す。書いた人に見せる数（記事・場所ごと）も直す
+  function setLikes(r, ids, on) {
+    const before = isLiked(r);
+    ids.forEach((id) => {
+      const k = lkKey(r, id), i = V.likes.indexOf(k);
+      if (on === (i >= 0)) return; // もうそうなっている
+      if (on) V.likes.push(k); else V.likes.splice(i, 1);
+      const x = stopOf(r, id); if (x) x.likes = Math.max(0, (x.likes || 0) + (on ? 1 : -1));
+    });
+    if (before !== isLiked(r)) r.likes = Math.max(0, likesOf(r) + (before ? -1 : 1));
+  }
+  // 記事の ♡：まだいいねしていない場所があれば全部に付け、全部に付いていれば全部外す
   function toggleLike(r) {
-    const i = V.liked.indexOf(r.id), on = i < 0;
-    if (on) V.liked.push(r.id); else V.liked.splice(i, 1);
-    r.likes = Math.max(0, likesOf(r) + (on ? 1 : -1));
-    toast(on ? "いいねしました。地図で、この記事の場所のピンのふちがピンクになります" : "いいねを外しました");
+    const on = !allLiked(r), n = r.spots.length;
+    setLikes(r, r.spots.map((x) => x.spot), on);
+    toast(on ? (n > 1 ? `この記事の${n}か所にいいねしました。地図で、その場所のピンのふちがピンクになります` : "いいねしました。地図で、この場所のピンのふちがピンクになります") : "いいねを外しました");
+    return on;
+  }
+  // 場所の ♡：その場所だけ
+  function toggleSpotLike(r, spotId) {
+    const on = !isSpotLiked(r, spotId), name = spotById[spotId].name;
+    setLikes(r, [spotId], on);
+    toast(on ? `${name}にいいねしました。地図で、この場所のピンのふちがピンクになります` : `${name}のいいねを外しました`);
     return on;
   }
   // 上の切り替え：お気に入り／エキスパート／すべての人 から1つ。♡（いいねした記事だけ）は、それと重ねて使う
@@ -387,13 +414,15 @@
     const hit = r.spots.filter((x) => (x.tags || []).includes(tag) || ((spotById[x.spot] || {}).tags || []).includes(tag));
     return hit.length ? hit : r.spots;
   }
-  // 地図に映っている範囲の記事か（タグで絞っているときは、タグに合う場所で見る）
-  const inArea = (r) => !areaBounds || tagSpots(r, state.tag).some((s) => areaBounds.contains([spotById[s.spot].lat, spotById[s.spot].lng]));
+  // 地図に出す、その記事の場所：タグに合う場所。♡（いいね）で絞っているときは、その中でいいねした場所だけ
+  const hitSpots = (r) => { const t = tagSpots(r, state.tag); return state.likedOnly ? t.filter((x) => isSpotLiked(r, x.spot)) : t; };
+  // 地図に映っている範囲の記事か（タグ・いいねで絞っているときは、それに合う場所で見る）
+  const inArea = (r) => !areaBounds || hitSpots(r).some((s) => areaBounds.contains([spotById[s.spot].lat, spotById[s.spot].lng]));
 
   function visibleRecords() {
     return D.records.filter((r) => {
       if (state.tag && !r.tags.includes(state.tag)) return false;
-      if (state.likedOnly && !isLiked(r)) return false; // ♡：いいねした記事（の場所）だけ。お気に入り・エキスパート・すべての人と重ねる
+      if (state.likedOnly && !hitSpots(r).length) return false; // ♡：いいねした場所のある記事だけ（場所ごと）。お気に入り・エキスパート・すべての人と重ねる
       if (r.official || r.writer === "me") return true; // 自分で公開した記事も出す
       if (state.mode === "fav") return !!favKind(r.writer, r);
       if (state.mode === "group") {
@@ -436,13 +465,12 @@
       const w = writerById[r.writer], fk = favKind(r.writer, r);
       const color = r.official ? "#E86B45" : fk ? w.color : "#A9B2AC";
       // on：タグに合う場所（タグで絞っていなければ全部）。ほかの記事でタグに合うなら、そちらを使う
-      const onSet = new Set(tagSpots(r, state.tag).map((x) => x.spot));
-      if (r.type === "route") {
-        const strong = fk || r.official;
-        const base = { dash: r.official ? "6 6" : null, onClick: make ? null : () => openArticle(r.id) }; // 線は1つの記事なので、押すとその記事へ
-        const onLine = { ...base, color, weight: make ? 2.5 : strong ? 4 : 2.5, opacity: make ? 0.28 : strong ? 0.85 : 0.6 };
-        // タグに関係のない場所につながる区間は、その場所の点と同じうすい灰色（続いている区間は1本の線にまとめる）
-        const offLine = { ...base, color: OFF_GRAY, weight: make ? 2.5 : strong ? 3 : 2.5, opacity: make ? 0.5 : 1, z: -1 };
+      const onSet = new Set(hitSpots(r).map((x) => x.spot));
+      /* 探すでは、場所どうしをつなぐ線は出さない（2026-11-27）。ルートの記事の場所でも、探すでは場所ごとにほかの人の記事が出ることが多いので、場所ごとに別々に出す。
+         つくるでは、記事のルートを薄く出す（タグに関係のない場所につながる区間は、その場所の点と同じうすい灰色。続いている区間は1本の線にまとめる） */
+      if (r.type === "route" && make) {
+        const onLine = { color, dash: r.official ? "6 6" : null, weight: 2.5, opacity: 0.28 };
+        const offLine = { color: OFF_GRAY, dash: r.official ? "6 6" : null, weight: 2.5, opacity: 0.5, z: -1 };
         let run = null;
         const flush = () => { if (run) layer.line(run.ll, run.on ? onLine : offLine); };
         r.spots.forEach((x, i) => {
@@ -475,11 +503,11 @@
     // 引きの地図では、近い場所をまとめて「場所の数」の丸にする（記事がいくつあっても、1つの場所は1と数える）
     const lks = likedSpots();
     const places = Object.values(seen).filter((x) => !inDraft.has(x.sp.id));
-    // タグに関係のない、ルートの途中の場所：うすい灰色の小さな点（数の丸にはまとめず、吹き出しも出さない。押せば、その場所の記事）
-    places.filter((x) => !x.on).forEach(({ r, s, sp }) => {
-      const sel = !make && sp.id === state.place;
-      const icon = { ...divPin(sel ? "off sel" : "off", ""), title: `${sp.name}（「${state.tag}」とは関係のない、ルートの途中の場所）` };
-      addPin([sp.lat, sp.lng], icon, { half: (PIN_SIZE.off / 2) * (sel ? 1.35 : 1), prio: -1, sp, r, s, off: true }, () => (make ? toggleDraftSpot(sp.id) : selectPlace(sp.id)), sel ? 800 : -20);
+    // つくる：タグに関係のない、ルートの途中の場所は、うすい灰色の小さな点（数の丸にはまとめず、吹き出しも出さない。押せば予定に入る）。
+    // 探すでは線を出さないので、こうした場所は出さない（タグ・いいねに合う場所だけ）
+    if (make) places.filter((x) => !x.on).forEach(({ r, s, sp }) => {
+      const icon = { ...divPin("off", ""), title: `${sp.name}（「${state.tag}」とは関係のない、ルートの途中の場所）` };
+      addPin([sp.lat, sp.lng], icon, { half: PIN_SIZE.off / 2, prio: -1, sp, r, s, off: true }, () => toggleDraftSpot(sp.id), -20);
     });
     const { singles, groups } = clusterPlaces(places.filter((x) => x.on), (x) => !make && x.sp.id === state.place);
     groups.forEach((g) => addCluster(g, g.some((x) => lks.has(x.sp.id))));
@@ -488,7 +516,9 @@
       // いいねした場所：ふちがピンク（lk）。まだの場所：ふちは白のまま、中の色をうすく（nl）。登録した場所の白いピンはそのまま
       const lk = lks.has(sp.id), sel = !make && sp.id === state.place;
       const cls = kind + (kind === "saved" ? "" : lk ? " lk" : " nl") + (sel ? " sel" : "");
-      const icon = kind === "saved" ? divPin(cls, "") : kind === "official" ? divPin(cls, "公式") : kind === "fav" ? divPin(cls, artSvg(writerById[r.writer]) || esc(initial(writerById[r.writer])[0]), `background:${color}`) : divPin(cls, "");
+      // 書いた人の絵：お気に入りはその人の色の上に、ほかの人は灰色の上に（2026-11-27。前はほかの人は灰色の点だけで、あおいさんなどの絵が出ていなかった）
+      const wArt = r ? artSvg(writerById[r.writer]) || esc(initial(writerById[r.writer])[0]) : "";
+      const icon = kind === "saved" ? divPin(cls, "") : kind === "official" ? divPin(cls, "公式") : kind === "fav" ? divPin(cls, wArt, `background:${color}`) : divPin(cls, wArt);
       if (!make) icon.title = sp.name;
       // 探す：押すと、下のシートをその場所の記事だけにする（1つの場所に記事がいくつもあることがあるので、記事へは直接飛ばない）
       addPin([sp.lat, sp.lng], icon, { half: (PIN_SIZE[kind] / 2) * (sel ? 1.35 : 1), prio: sel ? 99 : rank, sp, r, s, sel, lk }, () => (make ? toggleDraftSpot(sp.id) : selectPlace(sp.id)), sel ? 800 : 0);
@@ -567,6 +597,7 @@
   // つくる・組み直し：選んだ順に 1, 2, 3… と番号をつけ、線でつなぐ。番号の下に着く時刻。長押しで順番を入れ替える
   function drawDraft() {
     const d = ed(), lk = lockN(d), stops = d.stops, sch = schedule(d.start, stops);
+    swapTargets = [];
     const ll = stops.map((x) => [spotById[x.spot].lat, spotById[x.spot].lng]);
     // 組み直し：もう行った場所は薄く、行けなかった（スキップする）場所は灰色で出す
     const rd = stage() === "redo" ? state.redo : null;
@@ -583,7 +614,7 @@
       if (i < lk) { // いまいる場所・出てきた場所（動かせない）
         const skipHere = rd && rd.kind === "at" && rd.closed, left = rd && rd.kind !== "at";
         const cls = left ? "fl done" : skipHere ? "fl dropped now" : "fl now";
-        addPin(ll[i], numPin(numOf(d, i), skipHere || left ? "" : R.fmt(a.arrive), cls), { ...info, fl: true }, () => b && openArticle(b.r.id), 900);
+        addPin(ll[i], numPin(numOf(d, i), skipHere || left ? "" : R.fmt(a.arrive), cls), { ...info, fl: true }, () => b && openArticle(b.r.id, x.spot), 900);
         return;
       }
       const warn = !!stopWarn(sp, a);
@@ -592,8 +623,70 @@
         toggleDraftSpot(x.spot);
       }, 1000);
       onLongPress(m.getElement(), () => openOrderPicker(i));
+      swapTargets.push({ i, el: m.getElement(), ll: ll[i] });
+      pinSwap(m.getElement(), i);
     });
     return ll;
+  }
+
+  /* 地図の番号を引っぱって、ほかの番号の上ではなすと、2つの場所の順番を入れ替える（2026-11-27）。
+     長押し（順番を選ぶ画面）とは、指が動いたかどうかで分ける。動かせない番号（組み直しの、いまいる場所）とは入れ替えない */
+  let swapTargets = []; // { i, el, ll }：入れ替えられる番号のピン
+  function pinSwap(el, i) {
+    if (!el || !map) return;
+    el.style.touchAction = "none"; // 指で引っぱっても、画面がスクロールしないように
+    let s = null;
+    // 指の下にある、ほかの番号（ピンの真ん中から 26px まで）
+    const hit = (x, y) => {
+      const rc = $("#map").getBoundingClientRect();
+      let best = null;
+      swapTargets.forEach((t) => {
+        if (t.i === i) return;
+        const p = map.toPoint(t.ll), dd = Math.hypot(rc.left + p.x - x, rc.top + p.y - y);
+        if (dd < 26 && (!best || dd < best.dd)) best = { ...t, dd };
+      });
+      return best;
+    };
+    const end = (drop) => {
+      if (!s) return;
+      const { on, ghost, tgt } = s;
+      s = null;
+      if (ghost) ghost.remove();
+      el.classList.remove("swap-from");
+      swapTargets.forEach((t) => t.el.classList.remove("swap-to"));
+      if (!on) return;
+      longFired = true; // このあとに来るクリック（押した場所を予定から外す）を無視する
+      if (drop && tgt) swapStops(i, tgt.i);
+    };
+    el.addEventListener("pointerdown", (e) => {
+      if (e.button > 0) return;
+      s = { id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false, ghost: null, tgt: null };
+    });
+    el.addEventListener("pointermove", (e) => {
+      if (!s || e.pointerId !== s.id) return;
+      if (!s.on) {
+        if (Math.hypot(e.clientX - s.x0, e.clientY - s.y0) < 10) return;
+        s.on = true;
+        try { el.setPointerCapture(e.pointerId); } catch (err) { /* そのままでも動く */ }
+        const g = document.createElement("div");
+        g.className = "swap-ghost"; g.innerHTML = ($(".pin.num", el) || el).outerHTML;
+        document.body.appendChild(g); s.ghost = g;
+        el.classList.add("swap-from");
+      }
+      s.ghost.style.transform = `translate(${e.clientX - 14}px, ${e.clientY - 14}px)`;
+      const t = hit(e.clientX, e.clientY);
+      if ((t && t.el) !== (s.tgt && s.tgt.el)) { if (s.tgt) s.tgt.el.classList.remove("swap-to"); if (t) t.el.classList.add("swap-to"); }
+      s.tgt = t;
+    });
+    el.addEventListener("pointerup", (e) => { if (s && e.pointerId === s.id) end(true); });
+    el.addEventListener("pointercancel", (e) => { if (s && e.pointerId === s.id) end(false); });
+  }
+  function swapStops(a, b) {
+    const d = ed();
+    [d.stops[a], d.stops[b]] = [d.stops[b], d.stops[a]];
+    d.dirty = true;
+    drawMap(false); renderSheet();
+    toast(`${numOf(d, a)}と${numOf(d, b)}を入れ替えました（${spotById[d.stops[a].spot].name} ⇄ ${spotById[d.stops[b].spot].name}）`);
   }
 
   /* 並べ替え：行をつかんで上下にスライドすると、ほかの行がよけて入れ替わる（指でもマウスでも）
@@ -752,7 +845,7 @@
       const cls = { skip: "fl dropped", done: "fl done", at: "fl now", go: "fl go", todo: "fl" }[st];
       const time = (st === "at" || st === "go" || st === "todo") && s.arrive != null ? R.fmt(s.arrive) : "";
       const hot = st === "at" || st === "go";
-      addPin([sp.lat, sp.lng], numPin(i + 1, time, cls, false, st === "go" ? "go" : ""), { half: 14, below: time ? TIME_H : 0, prio: hot ? 10 : 5, sp, r: b && b.r, s: b && b.s, num: i + 1, fl: true }, () => b && openArticle(b.r.id), hot ? 900 : 500);
+      addPin([sp.lat, sp.lng], numPin(i + 1, time, cls, false, st === "go" ? "go" : ""), { half: 14, below: time ? TIME_H : 0, prio: hot ? 10 : 5, sp, r: b && b.r, s: b && b.s, num: i + 1, fl: true }, () => b && openArticle(b.r.id, s.spot), hot ? 900 : 500);
       return [sp.lat, sp.lng];
     });
     // 移動中は、いま歩いている道が大きく見えるように、その2か所に合わせる
@@ -780,7 +873,7 @@
       rating: p.r && p.s.rating, who: w && w.name, go: p.r && !ex ? "記事 ›" : "", photo: ph && ph.src, lk: !!p.lk,
       stats: p.r ? { went: p.r.went || 0, reads: readsOf(p.r) } : null, // 右上：この記事から行った人・最近読んだ人
       out: ps && ps.n > 1 ? { more: ps.n - 1, went: ps.went } : null,
-      onClick: !p.r ? null : ex ? () => selectPlace(p.sp.id) : () => openArticle(p.r.id),
+      onClick: !p.r ? null : ex ? () => selectPlace(p.sp.id) : () => openArticle(p.r.id, p.sp.id),
     };
   }
   /* 吹き出しを置く（どの地図でも使う）。pins: { ll, half, below?, prio, b: 中身 }
@@ -882,7 +975,7 @@
       <div class="card-top">${avatar(w)}<b>${esc(w.name)}</b>${badges(w, r)}</div>
       <h3>${esc(r.title)}</h3>
       <div class="meta"><span>${kind}</span><span>${esc(r.tags.join("・"))}</span><span>「行った」${r.went}人</span>${w.self ? `<span>いいね ${likesOf(r)}人</span>` : ""}</div>
-      <div class="meta" style="margin-top:4px">${ratingTag(best)}${isLiked(r) ? `<span class="badge liked">${IC.heartf}いいね済み</span>` : ""}${r.stamp ? '<span class="badge official">スタンプラリー</span>' : ""}${lock}</div>
+      <div class="meta" style="margin-top:4px">${ratingTag(best)}${isLiked(r) ? `<span class="badge liked">${IC.heartf}${allLiked(r) ? "いいね済み" : `いいね ${likedIn(r).length}か所`}</span>` : ""}${r.stamp ? '<span class="badge official">スタンプラリー</span>' : ""}${lock}</div>
     </button>`;
   }
 
@@ -901,7 +994,7 @@
     if (off.length) html += `<div class="section-label">公式（自治体・企業）</div>` + off.map(recordCard).join("");
     const within = [state.tag && `「${esc(state.tag)}」`, state.mode !== "all" && MODE_NAMES[state.mode]].filter(Boolean).join("・");
     if (!all.length) html = state.likedOnly
-      ? `<div class="empty">${within ? `${within}の記事で、いいねしたものはまだありません。` : "いいねした記事はまだありません。"}<br>記事を読んで、行ってみたいと思ったら ♡ いいね を押すと、その場所がここと地図に出ます。${state.mode !== "all" ? "<br>「すべての人」にすると、ほかの人の記事でいいねしたものも出ます。" : ""}</div>`
+      ? `<div class="empty">${within ? `${within}で、いいねした場所はまだありません。` : "いいねした場所はまだありません。"}<br>記事を読んで、行ってみたいと思ったら ♡ いいね を押すと（ルートの記事は場所ごとにも押せます）、その場所がここと地図に出ます。${state.mode !== "all" ? "<br>「すべての人」にすると、ほかの人の記事でいいねしたものも出ます。" : ""}</div>`
       : `<div class="empty">この条件の記事はまだありません。<br>「エキスパート」に切り替えてみてください。</div>`;
     else if (!recs.length) html = `<div class="empty">地図に映っている範囲には、記事がありません。<br>地図を縮小するか、動かしてみてください。<br><br><button class="btn ghost small" data-act="fit-all">記事のある場所を表示する（${all.length}件）</button></div>`;
     $("#sheet-body").innerHTML = foundCard() + html;
@@ -909,14 +1002,15 @@
 
   /* 探す：地図で選んだ場所の記事だけを出す。いまの絞り込み（タグ・お気に入りなど）に合う記事を先に、合わない記事もその下に出す */
   function renderPlaceSheet() {
-    const sp = spotById[state.place], all = recsAt(sp.id), vis = new Set(visibleRecords().map((r) => r.id));
+    // 絞り込みに合う記事：その記事の、タグ・いいねに合う場所に、この場所が入っているもの（いいねは場所ごと）
+    const sp = spotById[state.place], all = recsAt(sp.id), vis = new Set(visibleRecords().filter((r) => hitSpots(r).some((x) => x.spot === sp.id)).map((r) => r.id));
     const score = (r) => { const k = favKind(r.writer, r); return k === "fav" ? 3 : k ? 2 : r.official ? 1 : 0; };
     const order = (a, b) => score(b) - score(a) || (b.went || 0) - (a.went || 0);
     const hit = all.filter((r) => vis.has(r.id)).sort(order), rest = all.filter((r) => !vis.has(r.id)).sort(order);
     const ps = placeStats(sp.id);
-    const label = modeLabel(), liked = all.some(isLiked);
+    const label = modeLabel(), liked = all.some((r) => isSpotLiked(r, sp.id)); // この場所にいいねしたか（どの記事でも）
     $("#sheet-head").innerHTML = `<button class="pl-back" data-act="place-clear" aria-label="この範囲の記事に戻る">${IC.back}</button><b>${esc(sp.name)}</b><small>記事${all.length}件・${IC.foot}累計${nfmt(ps.went)}人</small>`;
-    let html = `<div class="pl-sub">${esc(sp.kind)}${sp.addr ? "・" + esc(sp.addr) : ""}<span>この場所の記事だけを出しています</span>${liked ? `<span class="pl-lk">${IC.heartf}いいねした記事あり</span>` : ""}</div>`;
+    let html = `<div class="pl-sub">${esc(sp.kind)}${sp.addr ? "・" + esc(sp.addr) : ""}<span>この場所の記事だけを出しています</span>${liked ? `<span class="pl-lk">${IC.heartf}いいね済み</span>` : ""}</div>`;
     html += hit.map(recordCard).join("");
     if (rest.length) html += `<div class="section-label">いまの絞り込み（${esc(state.tag || "すべて")}・${label}）には入らない記事</div>` + rest.map(recordCard).join("");
     if (!all.length) html += `<div class="empty">この場所の記事はまだありません。</div>`;
@@ -1038,11 +1132,11 @@
   // いまの状況（臨時休業・雨・遅れ）をアイコンの小さな札で
   const condChips = () => [state.closed.length && [IC.closed, "休業"], state.rain && [IC.rain, "雨"], state.delay && [IC.delay, `${state.delay}分遅れ`]]
     .filter(Boolean).map(([i, l]) => `<span class="cond-chip">${i}${l}</span>`).join("");
-  // 予定表の ≡ をつかんで並べ替えられるようにする
-  function sortableStops(d) {
-    const list = $("#sheet-body .mk-list");
+  // 予定表の ≡ をつかんで並べ替えられるようにする（順番だけの画面は .sm-list の行）
+  function sortableStops(d, listSel = ".mk-list", item = ".mk-stop") {
+    const list = $("#sheet-body " + listSel);
     if (!list) return;
-    makeSortable(list, { item: ".mk-stop", handle: ".mk-grip", lock: lockN(d), scroller: $("#sheet-body"), onDrop: (from, to) => {
+    makeSortable(list, { item, handle: ".mk-grip", lock: lockN(d), scroller: $("#sheet-body"), onDrop: (from, to) => {
       const [it] = d.stops.splice(from, 1); d.stops.splice(to, 0, it); d.dirty = true;
       renderSheet(); drawMap(false);
       toast(`${spotById[it.spot].name}を${numOf(d, to)}番にしました`);
@@ -1051,13 +1145,16 @@
   // 記事から予定をつくったとき：どの順でどこを回るかだけ（時間は出さない）。すぐに保存でき、「詳しく調整」でいつもの画面へ
   function renderSimpleMake(d) {
     $("#sheet-head").innerHTML = `<b>予定をつくる</b><small>${d.stops.length}か所・回る順番</small>`;
-    const list = d.stops.map((s, i) => { const sp = spotById[s.spot]; return `<li><i class="mk-num">${i + 1}</i><span><b>${esc(sp.name)}</b>${sp.kind ? `<small>${esc(sp.kind)}</small>` : ""}</span></li>`; }).join("");
+    // 番号を押すと順番を選ぶ画面、≡ をつかんで上下に動かすと入れ替わる（2026-11-27）
+    const list = d.stops.map((s, i) => { const sp = spotById[s.spot]; return `<li class="sm-row"><button class="mk-num" data-mk="order" data-i="${i}" aria-label="順番を選ぶ">${i + 1}</button><span class="sm-tx"><b>${esc(sp.name)}</b>${sp.kind ? `<small>${esc(sp.kind)}</small>` : ""}</span><span class="mk-grip" aria-label="つかんで上下に動かすと順番が入れ替わります" title="つかんで上下に動かす">${ICON.grip}</span></li>`; }).join("");
     const saved = d.id && !d.dirty;
     $("#sheet-body").innerHTML = foundCard() + `<ol class="sm-list">${list}</ol>
+      ${d.stops.length > 1 ? `<div class="mk-tip">${ICON.grip}をつかんで上下に動かすか、地図の番号をほかの番号の上まで引っぱると入れ替わります</div>` : ""}
       ${d.from ? `<div class="mk-tip">元の記事：${esc(recById[d.from].title)}</div>` : ""}
       <div class="mk-save"><input class="field" id="mk-name" placeholder="予定の名前" value="${esc(d.name)}" aria-label="予定の名前"><button class="btn primary" data-mk="save">${IC.save}${d.id ? "上書き" : "保存"}</button></div>
       ${saved ? `<div class="saved-note">${IC.check}<span>保存しました。時間は、たどる前に決めます</span><button class="link-btn" data-mk="follow">${IC.clock}時間を決めてたどる</button></div>` : `<div class="small sm-note">順番だけで保存できます。時間は、たどるときに決められます</div>`}
       <button class="btn ghost block sm-detail" data-mk="detail">${IC.clock}詳しく調整</button>`;
+    sortableStops(d, ".sm-list", ".sm-row");
   }
   function renderMakeSheet() {
     const d = state.draft, sch = schedule(d.start, d.stops), n = sch.length;
@@ -1081,7 +1178,7 @@
         <button class="tool-btn" data-mk="new" title="新しくつくる（空にする）">${IC.trash}<span>空にする</span></button>
       </div>
       <div class="mk-list">${stopItems(d, sch)}</div>
-      <div class="mk-tip">${ICON.grip}をつかむか、地図の番号を長押しで並べ替え</div>
+      <div class="mk-tip">${ICON.grip}をつかんで上下に動かすか、地図の番号をほかの番号の上まで引っぱると入れ替わります（番号の長押しで、順番を選ぶ）</div>
       ${d.from ? `<div class="mk-tip">元の記事：${esc(recById[d.from].title)}</div>` : ""}
       <div class="mk-save"><input class="field" id="mk-name" placeholder="予定の名前" value="${esc(d.name)}" aria-label="予定の名前">${decide ? "" : `<button class="btn primary" data-mk="save">${IC.save}${d.id ? "上書き" : "保存"}</button>`}</div>
       ${budgetLine(budgetOf(d.stops), sch)}
@@ -1114,6 +1211,16 @@
     sortableStops(d);
   }
 
+  /* たどる：その場所の記事（2026-11-27。移動中に、次に行く場所の記事を読めるように）。
+     予定のもとの記事にその場所があればそれ、なければその場所でいちばん読んでほしい記事。押すと、その場所のところから開く */
+  function stopArticle(pl, spotId) {
+    const p = state.plans.find((x) => x.id === pl.planId), from = p && p.from && recById[p.from];
+    if (from && stopOf(from, spotId)) return from;
+    const b = bestRecordFor(spotId);
+    return b ? b.r : null;
+  }
+  const readBtn = (r, spotId, label = "") => (r ? `<button class="read-ic" data-fl="read" data-id="${r.id}" data-spot="${esc(spotId)}" title="この場所の記事を読む" aria-label="${esc(spotById[spotId].name)}の記事を読む">${IC.read}${label ? `<span>${label}</span>` : ""}</button>` : "");
+
   /* たどる：保存した予定の一覧 → 選ぶと、その予定の時間割・組み直し */
   function renderFollowSheet() {
     if (state.followList || !state.plan) {
@@ -1138,8 +1245,9 @@
     const fromSp = pl.from && spotById[pl.from];
     // いまの状態：いる（ついた）／移動中（でた〜次の ついた）／全部まわった
     let status;
-    if (ph === "at") status = `<div class="fl-status at">${IC.gps}<span><small>いまここ</small><b><i>${pl.cur + 1}</i>${esc(curSp.name)}</b></span><em>〜${R.fmt(cur.depart)}</em></div>`;
-    else if (ph === "go") status = `<div class="fl-status go">${moveIcon(cur)}<span><small>移動中${fromSp ? `（${modeName(cur)}）・${esc(fromSp.name)}から` : ""}</small><b><i>${pl.cur + 1}</i>${esc(curSp.name)}</b></span><em>${R.fmt(cur.arrive)}着</em>${gIcon(fromSp ? gmapLeg(fromSp, curSp, cur.mode) : gmapPlace(curSp), "経路")}</div>`;
+    const curRead = readBtn(stopArticle(pl, cur.spot), cur.spot, "記事");
+    if (ph === "at") status = `<div class="fl-status at">${IC.gps}<span><small>いまここ</small><b><i>${pl.cur + 1}</i>${esc(curSp.name)}</b></span><em>〜${R.fmt(cur.depart)}</em>${curRead ? `<div class="fl-acts">${curRead}</div>` : ""}</div>`;
+    else if (ph === "go") status = `<div class="fl-status go">${moveIcon(cur)}<span><small>移動中${fromSp ? `（${modeName(cur)}）・${esc(fromSp.name)}から` : ""}</small><b><i>${pl.cur + 1}</i>${esc(curSp.name)}</b></span><em>${R.fmt(cur.arrive)}着</em><div class="fl-acts">${curRead}${gIcon(fromSp ? gmapLeg(fromSp, curSp, cur.mode) : gmapPlace(curSp), "経路")}</div></div>`; // 記事と経路は縦に並べ、場所の名前の幅を残す
     else status = `<div class="fl-status end">${IC.flag}<span><small>おつかれさまでした</small><b>予定の場所をすべてまわりました</b></span><button class="btn small primary" data-act="write">${IC.edit}記事を書く</button></div>`;
     // 起きたこと（アイコンで押したもの）。移動中なら、次に行く場所のこととして出す
     const alerts = [];
@@ -1176,7 +1284,7 @@
         </div>`;
       return `${leg}<div class="tl-item"><div class="tl-time">${s.arrive != null ? R.fmt(s.arrive) : "—"}</div><div class="tl-line"><span class="tl-dot ${st}"></span></div>
         <div class="tl-card ${st} ${s.status === "replaced" ? "replaced" : ""}">
-          <div class="tl-head"><b><i class="tl-no">${i + 1}</i><span>${esc(sp.name)}</span></b>${badge}</div>
+          <div class="tl-head"><b><i class="tl-no">${i + 1}</i><span>${esc(sp.name)}</span></b><span class="tl-head-r">${badge}${readBtn(stopArticle(pl, s.spot), s.spot)}</span></div>
           <div class="tl-sub">${ioText(sp)}・${stayText(s.stay)}${ch ? `<span class="change ${s.status}">${ch}</span>` : ""}${flags}</div>
           ${s.replacedFrom ? `<div class="tl-sub">${esc(spotById[s.replacedFrom].name)}の代わり</div>` : ""}
           ${s.pickWhy && st !== "skip" ? whyChips(s.pickWhy) : ""}
@@ -1473,6 +1581,7 @@
     if (fl === "arrive") flArrive(Number(t.dataset.i));
     if (fl === "leave") flLeave(Number(t.dataset.i));
     if (fl === "redo") openRedo(null);
+    if (fl === "read") openArticle(id, t.dataset.spot, { noCta: true }); // たどっている途中に、その場所の記事を読む（予定をつくるボタンは出さない）
     if (fl === "list") { state.followList = true; renderSheet(); drawMap(true); }
     if (fl === "del") {
       const p = state.plans.find((x) => x.id === id);
@@ -1666,7 +1775,8 @@
     });
   }
 
-  function openArticle(id) { showPanel((p) => renderArticle(p, id)); }
+  // at：その場所のところまで下げて開く（ルートの記事の、その場所の部分）。o：renderArticle の opt（noCta：予定をつくるボタンを出さない）
+  function openArticle(id, at = null, o = {}) { showPanel((p) => renderArticle(p, id, { ...o, at })); }
   // 記事の写真をすべて（見出し画像を1枚目に）。記事を開いたときのいちばん上で、横にずらして見る
   function articlePhotos(r) {
     const out = [], seen = new Set();
@@ -1740,9 +1850,15 @@
       if (e.target.closest("[data-sd-close]") || e.target === box) { box.remove(); if (onClose) onClose(); }
     });
   }
-  /* 記事を読む画面。opt：{ rec：まだ公開していない記事（プレビュー）, preview：true なら登録・つくるなどのボタンを出さない, onMap(地図) } */
+  /* 記事を読む画面。opt：{ rec：まだ公開していない記事（プレビュー）, preview：true なら登録・つくるなどのボタンを出さない, onMap(地図),
+     at：その場所のところまで下げて開く, noCta：予定をつくるボタンを出さない（たどっている途中に開いたとき） } */
   function renderArticle(p, id, opt = {}) {
     const r = opt.rec || recById[id], w = writerById[r.writer], fk = favKind(w.id, r), pv = !!opt.preview;
+    // 場所ごとのいいね（ルートの記事だけ。1か所の記事は、記事のいいねと同じ）。書いた人には、場所ごとの数
+    const multiLike = r.spots.length > 1;
+    const spLike = (s) => (!multiLike || pv ? "" : w.self
+      ? `<span class="sp-like-n" title="この場所にいいねした人（書いたあなただけに見えます）">${IC.heartf}${s.likes || 0}</span>`
+      : `<button class="sp-like ${isSpotLiked(r, s.spot) ? "on" : ""}" data-sp-like="${esc(s.spot)}" aria-pressed="${isSpotLiked(r, s.spot)}" title="この場所にいいね" aria-label="${esc(spotById[s.spot].name)}にいいね">${isSpotLiked(r, s.spot) ? IC.heartf : IC.heart}</button>`);
     const isMember = V.memberships.includes(w.id);
     const favBtn = pv || w.official || w.self ? "" : `<button class="btn small ${fk === "fav" ? "lime" : "ghost"}" id="fav-btn">${fk === "fav" ? "お気に入り中" : "お気に入りに入れる"}</button>`;
     // ルートの記事は、場所のあいだの移動も出す
@@ -1760,8 +1876,8 @@
       const mv = i > 0 && sch[i] ? `<div class="stop-move">${sch[i].mode === "ride" ? IC.train : ICON.walk}${esc(spotById[r.spots[i - 1].spot].name)}から${moveText(sch[i])}${modeTag(sch[i])}${gLink(gmapLeg(spotById[r.spots[i - 1].spot], sp, sch[i].mode), "行き方", "inline")}</div>` : "";
       // 場所ごとのタグ（駅・自然・グルメなど）
       const stags = (s.tags || []).map((t) => `<span class="stop-tag">#${esc(t)}</span>`).join("");
-      return `${mv}<div class="stop"><div class="stop-no">${i + 1}</div><div class="stop-main">
-        <div class="stop-title"><b>${esc(sp.name)}</b> ${ratingTag(s.rating)}${stags}${pv ? "" : `<button class="save-btn ${saved ? "on" : ""}" data-save="${sp.id}">${saved ? "登録済み" : "＋ 登録"}</button>`}<button class="more-btn" data-more="${i}">${IC.info}詳しく</button></div>
+      return `${mv}<div class="stop" data-at="${esc(sp.id)}"><div class="stop-no">${i + 1}</div><div class="stop-main">
+        <div class="stop-title"><b>${esc(sp.name)}</b> ${ratingTag(s.rating)}${stags}${spLike(s)}${pv ? "" : `<button class="save-btn ${saved ? "on" : ""}" data-save="${sp.id}">${saved ? "登録済み" : "＋ 登録"}</button>`}<button class="more-btn" data-more="${i}">${IC.info}詳しく</button></div>
         ${s.head ? `<div class="stop-head">${esc(s.head)}</div>` : ""}
         ${rich ? `<div class="stop-text ab">${flowHTML(s.blocks)}</div>` : `${gallery}
         <div class="stop-text">${text}</div>`}
@@ -1783,14 +1899,16 @@
     const have = appending ? new Set([...ed().stops.map((x) => x.spot), ...(redoing ? redoUsed() : [])]) : new Set();
     const fresh = appending ? r.spots.filter((s) => !have.has(s.spot)).length : n;
     const ctaLabel = appending ? (!fresh ? "この記事の場所は、もう予定に入っています" : n > 1 ? `このルートを予定の後ろに足す（${fresh}か所）` : "この場所を予定に足す") : (n > 1 ? "このルートで予定をつくる" : "この場所から予定をつくる");
-    const cta = pv ? "" : `<div class="sticky-cta"><button class="btn accent block" id="make-btn" ${appending && !fresh ? "disabled" : ""}>${ICON.calplus}${ctaLabel}</button>${appending ? `<div class="small" style="text-align:center;margin-top:6px">${redoing ? "組み直している予定" : `つくっている予定（${state.draft.stops.length}か所）`}の後ろに足します</div>` : ""}</div>`;
+    const cta = pv || opt.noCta ? "" : `<div class="sticky-cta"><button class="btn accent block" id="make-btn" ${appending && !fresh ? "disabled" : ""}>${ICON.calplus}${ctaLabel}</button>${appending ? `<div class="small" style="text-align:center;margin-top:6px">${redoing ? "組み直している予定" : `つくっている予定（${state.draft.stops.length}か所）`}の後ろに足します</div>` : ""}</div>`;
     const mmId = pv ? "mm-art-pv" : "mm-art";
     // いいね：読む人には数を出さず、その人が付けたかどうかだけ。書いた人には「行った」と「いいね」の数
-    const likeBtn = (big) => `<button class="like-btn ${big ? "big" : ""} ${isLiked(r) ? "on" : ""}" data-like aria-pressed="${isLiked(r)}">${isLiked(r) ? IC.heartf : IC.heart}<span>${isLiked(r) ? "いいね済み" : "いいね"}</span></button>`;
+    // 記事の ♡ は、場所すべてにいいねしていれば「いいね済み」、一部なら「N か所にいいね」
+    const likeLabel = () => (allLiked(r) ? "いいね済み" : isLiked(r) ? `${likedIn(r).length}か所にいいね` : "いいね");
+    const likeBtn = (big) => `<button class="like-btn ${big ? "big" : ""} ${allLiked(r) ? "on" : isLiked(r) ? "part" : ""}" data-like aria-pressed="${allLiked(r)}">${isLiked(r) ? IC.heartf : IC.heart}<span>${likeLabel()}</span></button>`;
     const likeTop = pv ? "" : w.self
       ? `<div class="own-st">${IC.foot}<span>行った <b>${r.went}</b>人</span>${IC.heartf}<span>いいね <b>${likesOf(r)}</b>人</span><small>いいねの数は、書いたあなただけに見えます</small></div>`
-      : `<div class="like-row">${likeBtn(false)}<small>行ってみたいと思ったら。いいねした記事の場所は、地図のピンのふちがピンクになります（数はほかの人には見えません）</small></div>`;
-    const likeEnd = pv || w.self ? "" : `<div class="like-end"><b>この記事を読んで、行ってみたくなりましたか？</b>${likeBtn(true)}</div>`;
+      : `<div class="like-row">${likeBtn(false)}<small>${multiLike ? "行ってみたいと思ったら。ここで全部の場所に、場所ごとの ♡ でその場所だけにいいねできます。" : "行ってみたいと思ったら。"}いいねした場所は、地図のピンのふちがピンクになります（数はほかの人には見えません）</small></div>`;
+    const likeEnd = pv || w.self ? "" : `<div class="like-end"><b>この記事を読んで、行ってみたくなりましたか？</b>${multiLike ? "<small>行きたい場所だけなら、場所ごとの ♡ で</small>" : ""}${likeBtn(true)}</div>`;
     p.innerHTML = (pv ? "" : bar(w.official ? (w.shop ? "店の公式" : "公式の特集") : "記事")) + `${carouselHTML(articlePhotos(r))}<div class="pad">
       <div class="writer-row"><button data-writer="${w.id}" style="display:flex;align-items:center;gap:10px">${avatar(w)}<span class="name">${esc(w.name)}</span></button>${badges(w, r)}<span style="margin-left:auto">${favBtn}</span></div>
       ${collab}
@@ -1813,21 +1931,33 @@
     // 詳しく：記事の場所をすべて、順番に（閉じたら、登録のボタンをそろえる）
     const syncSaves = () => $$("[data-save]", p).forEach((b) => { const on = V.saved.some((x) => x.spot === b.dataset.save); b.classList.toggle("on", on); b.textContent = on ? "登録済み" : "＋ 登録"; });
     $$("[data-more]", p).forEach((b) => b.addEventListener("click", () => openSpotDetails(r, Number(b.dataset.more), pv, syncSaves)));
+    // その場所のところから読む（写真が読み込まれて高さが変わることがあるので、少しあとにもう一度合わせる）
+    if (opt.at) {
+      const go = (hl) => {
+        const el = $(`.stop[data-at="${opt.at}"]`, p); if (!el) return;
+        p.scrollTop += el.getBoundingClientRect().top - p.getBoundingClientRect().top - 64;
+        if (hl) { el.classList.add("stop-hl"); setTimeout(() => el.classList.remove("stop-hl"), 1800); }
+      };
+      requestAnimationFrame(() => { go(true); setTimeout(() => go(false), 300); });
+    }
     if (pv) return;
     $$("[data-writer]", p).forEach((b) => b.addEventListener("click", () => openWriter(b.dataset.writer)));
     const fb = $("#fav-btn", p);
     if (fb) fb.addEventListener("click", () => { toggleFav(w.id); paint(); });
-    // いいね（上と下のボタンをそろえる。地図・一覧は、記事を閉じたときに描き直す）
-    $$("[data-like]", p).forEach((b) => b.addEventListener("click", () => {
-      const on = toggleLike(r);
+    // いいね（記事の ♡：場所すべて／場所の ♡：その場所だけ）。ボタンをそろえる。地図・一覧は、記事を閉じたときに描き直す
+    const syncLikes = () => {
       $$("[data-like]", p).forEach((x) => {
-        x.classList.toggle("on", on); x.setAttribute("aria-pressed", on);
-        x.innerHTML = `${on ? IC.heartf : IC.heart}<span>${on ? "いいね済み" : "いいね"}</span>`;
+        x.classList.toggle("on", allLiked(r)); x.classList.toggle("part", isLiked(r) && !allLiked(r)); x.setAttribute("aria-pressed", allLiked(r));
+        x.innerHTML = `${isLiked(r) ? IC.heartf : IC.heart}<span>${likeLabel()}</span>`;
       });
-    }));
+      $$("[data-sp-like]", p).forEach((x) => { const on = isSpotLiked(r, x.dataset.spLike); x.classList.toggle("on", on); x.setAttribute("aria-pressed", on); x.innerHTML = on ? IC.heartf : IC.heart; });
+    };
+    $$("[data-like]", p).forEach((b) => b.addEventListener("click", () => { toggleLike(r); syncLikes(); }));
+    $$("[data-sp-like]", p).forEach((b) => b.addEventListener("click", () => { toggleSpotLike(r, b.dataset.spLike); syncLikes(); }));
     const jb = $("#join-btn", p);
     if (jb) jb.addEventListener("click", () => { V.memberships.push(w.id); toast("デモ：メンバーになりました"); paint(); });
-    $("#make-btn", p).addEventListener("click", () => useRecord(r.id, appending ? "append" : "replace"));
+    const mkb = $("#make-btn", p);
+    if (mkb) mkb.addEventListener("click", () => useRecord(r.id, appending ? "append" : "replace"));
     // 場所の登録（自分のマップに出る）。画面を描き直さず、ボタンだけ変える
     $$("[data-save]", p).forEach((b) => b.addEventListener("click", () => {
       const on = toggleSaved(b.dataset.save);
@@ -3088,7 +3218,7 @@
         ${place}
         ${route ? `<input class="ws-sub" data-ws-sub="${k}" value="${esc(x.head)}" placeholder="小見出し（例：運河をまたぐ橋の上から）" aria-label="${k + 1}か所めの小見出し">` : ""}
         ${sp ? `<div class="ws-line"><span class="ws-k">評価</span><div class="wr-rate">${[3, 2, 1].map((v) => `<button type="button" class="r${v} ${v === x.rating ? "on" : ""}" data-ws-rate="${v}" data-k="${k}">${RATING[v]}</button>`).join("")}</div></div>` : ""}
-        <div class="ws-line"><span class="ws-k">${route ? "この場所のタグ" : "タグ"}</span><div class="wr-tags ws-tags">${route ? tagBtns(SPOT_TAGS, (t) => x.tags.includes(t), `data-k="${k}" data-ws-stag`) : tagBtns(D.TAGS, (t) => wr.tags.includes(t), "data-wtag")}</div></div>
+        <div class="ws-line"><span class="ws-k">${route ? "この場所のタグ<small>1つ</small>" : "タグ"}</span><div class="wr-tags ws-tags">${route ? tagBtns(SPOT_TAGS, (t) => x.tags.includes(t), `data-k="${k}" data-ws-stag`) : tagBtns(D.TAGS, (t) => wr.tags.includes(t), "data-wtag")}</div></div>
         <div class="ws-ed" data-ws-ed="${k}"></div>
         ${sp ? `<button type="button" class="wr-info ws-info" data-ws="info" data-k="${k}"><span class="ws-info-h">${IC.info}<b>場所の情報</b><small>本文には入りません。記事の「詳しく」に出ます</small></span><span class="ws-info-v">${infoSummary(x.info || infoFrom(sp))}</span></button>` : ""}
       </section>`;
@@ -3220,7 +3350,7 @@
       return makeRecord({
         id: wr.recId, title: wr.title.trim() || "（タイトルなし）", mode: wr.mode, tag: wr.tag, tags: wr.tags, cover: wr.cover,
         vis: (wr.recId && recById[wr.recId] && recById[wr.recId].vis) || "public", leadBlocks: rt ? blocksOf(wr.lead) : [],
-        secs: secs.map((x) => ({ spot: x.spot, rating: x.rating, head: rt ? x.head.trim() : "", tags: rt ? x.tags : [], info: x.info, blocks: blocksOf(x.html) })),
+        secs: secs.map((x) => ({ spot: x.spot, rating: x.rating, head: rt ? x.head.trim() : "", tags: rt ? x.tags.slice(0, 1) : [], info: x.info, blocks: blocksOf(x.html) })),
       });
     };
     root.addEventListener("click", (e) => {
@@ -3229,7 +3359,8 @@
       if (d.wsMode) { setMode(d.wsMode); return; }
       if (d.wtag != null) { const i = wr.tags.indexOf(d.wtag); if (i >= 0) wr.tags.splice(i, 1); else wr.tags.push(d.wtag); b.classList.toggle("on", i < 0); return; }
       if (d.wmain != null) { wr.tag = wr.tag === d.wmain ? null : d.wmain; $$("[data-wmain]", p).forEach((y) => y.classList.toggle("on", y.dataset.wmain === wr.tag)); return; }
-      if (d.wsStag != null && x) { const i = x.tags.indexOf(d.wsStag); if (i >= 0) x.tags.splice(i, 1); else x.tags.push(d.wsStag); b.classList.toggle("on", i < 0); return; }
+      // 場所のタグは1つだけ（2026-11-27）。別のタグを押すと入れ替わり、同じタグをもう一度押すと外れる
+      if (d.wsStag != null && x) { x.tags = x.tags[0] === d.wsStag && x.tags.length === 1 ? [] : [d.wsStag]; $$(`[data-ws-stag][data-k="${k}"]`, p).forEach((y) => y.classList.toggle("on", x.tags.includes(y.dataset.wsStag))); return; }
       if (d.wsRate && x) { const v = Number(d.wsRate); x.rating = x.rating === v ? 0 : v; $$(`[data-ws-rate][data-k="${k}"]`, p).forEach((y) => y.classList.toggle("on", Number(y.dataset.wsRate) === x.rating)); return; }
       if (d.ws === "place" && x) { pickPlace(k); return; }
       if (d.ws === "info" && x && spotById[x.spot]) {
@@ -3841,7 +3972,7 @@
       else if (act === "place-clear") clearPlace();
       else if (act.startsWith("found")) onFound(act);
       else if (act) onFollowAct(act);
-      else if (t.dataset.rec) openArticle(t.dataset.rec);
+      else if (t.dataset.rec) openArticle(t.dataset.rec, stage() === "explore" ? state.place : null);
     };
     sb.addEventListener("click", onSheetClick);
     $("#sheet-head").addEventListener("click", onSheetClick); // 見出しのボタン（たどる：一覧へ）

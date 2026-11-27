@@ -1465,3 +1465,43 @@ html.sheet-dragging, html.sheet-dragging * { -webkit-user-select: none !importan
 .ps-back.on-map .ps-body { flex: 0 1 auto; min-height: 0; padding: 0; }
 .ps-back.on-map .ps-hint { margin: 0; box-shadow: 0 2px 10px rgba(0,0,0,.12); }
 .ps-back.on-map .ps-body.has-res { padding: 2px 12px 12px; background: var(--paper); border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,.14); }
+
+/* ===== 2026-11-27（11回目）：並べ替え・地図の番号の入れ替え・たどるの記事・ほかの人のピンの絵・場所ごとのいいね ===== */
+/* ほかの人のピン：灰色の上に、書いた人の絵 */
+.pin.other { width: 22px; height: 22px; border-width: 2px; font-size: 10px; }
+/* 順番だけの画面：番号を押すと順番を選ぶ、≡ で上下に入れ替え */
+.sm-list li.sm-row { background: var(--paper); border-radius: 10px; }
+.sm-list li .sm-tx { flex: 1; }
+.sm-list li .mk-grip { display: inline-flex; flex-direction: row; margin-left: auto; height: 32px; }
+.sm-list li.sort-drag { background: #FFF6F1; box-shadow: 0 8px 22px rgba(0,0,0,.2); }
+.sm-list.sorting li + li::before { opacity: 0; }
+/* 地図の番号を引っぱって入れ替える */
+.gm-mk.swap-from .pin.num { opacity: .35; }
+.gm-mk.swap-to .pin.num { transform: scale(1.3); transition: transform .12s ease; box-shadow: 0 0 0 4px var(--lime), 0 2px 8px rgba(0,0,0,.35); }
+.swap-ghost { position: fixed; left: 0; top: 0; z-index: 4000; pointer-events: none; }
+.swap-ghost .pin.num { width: 28px; height: 28px; transform: scale(1.2); box-shadow: 0 6px 14px rgba(0,0,0,.35); animation: none; }
+/* たどる：その場所の記事を読む（読むと同じ本のアイコン） */
+.read-ic { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 30px; height: 28px; padding: 0 7px; border: 1px solid var(--line); border-radius: 14px; background: #fff; color: var(--green); font-size: 11.5px; font-weight: 700; cursor: pointer; }
+.read-ic .i { width: 17px; height: 17px; }
+.read-ic:active { transform: scale(.95); }
+.tl-head-r { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.fl-acts { display: flex; flex-direction: column; gap: 4px; flex: none; }
+.fl-acts > * { justify-content: center; height: 24px; box-sizing: border-box; }
+.fl-status .read-ic { height: 24px; border: 0; background: rgba(255,255,255,.94); color: var(--green); }
+.fl-status.at .read-ic { background: #fff; border: 1px solid #BFD5F6; }
+/* 記事：場所ごとのいいね */
+.sp-like { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 26px; border: 1.5px solid var(--like); border-radius: 13px; background: #fff; color: var(--like); cursor: pointer; }
+.sp-like .i { width: 15px; height: 15px; color: var(--like); }
+.sp-like.on { background: var(--like); }
+.sp-like.on .i { color: #fff; animation: likepop .3s ease; }
+.sp-like:active { transform: scale(.94); }
+.sp-like-n { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 700; color: var(--like-ink); }
+.sp-like-n .i { width: 13px; height: 13px; color: var(--like); }
+.like-btn.part { background: #FFF1F5; }
+.like-end small { display: block; font-size: 12px; color: var(--gray); margin: 2px 0 8px; }
+@media (prefers-reduced-motion: reduce) { .sp-like.on .i { animation: none; } }
+/* 記事を、その場所のところから開いたとき */
+.stop.stop-hl { animation: stophl 1.8s ease; border-radius: 12px; }
+@keyframes stophl { 0%, 40% { background: #FFF6D6; box-shadow: 0 0 0 6px #FFF6D6; } 100% { background: transparent; box-shadow: 0 0 0 6px transparent; } }
+/* 書く：場所のタグは1つだけ */
+.ws-k small { display: block; font-size: 10.5px; font-weight: 600; color: var(--gray); }
