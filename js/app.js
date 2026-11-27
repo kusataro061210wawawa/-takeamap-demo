@@ -93,7 +93,7 @@
   const newDraft = (o = {}) => ({ id: null, name: "", start: 600, stops: [], from: null, dirty: false, ...o });
 
   const state = {
-    tag: null, mode: "fav", view: "read",
+    tag: null, mode: "fav", likedOnly: false, view: "read",
     readTag: null,           // 読む：選んでいるタグ（null = おすすめ）
     readScope: "all",        // 読む：記事の出どころ all（すべての人）/ fav（お気に入りの書き手）
     place: null,             // 探す：地図で押した場所。下のシートをその場所の記事だけにする
@@ -270,7 +270,9 @@
     toast(on ? "いいねしました。地図で、この記事の場所のピンのふちがピンクになります" : "いいねを外しました");
     return on;
   }
-  const modeLabel = () => ({ fav: "お気に入り", group: "エキスパート", all: "すべての人", liked: "いいね" })[state.mode];
+  // 上の切り替え：お気に入り／エキスパート／すべての人 から1つ。♡（いいねした記事だけ）は、それと重ねて使う
+  const MODE_NAMES = { fav: "お気に入り", group: "エキスパート", all: "すべての人" };
+  const modeLabel = () => MODE_NAMES[state.mode] + (state.likedOnly ? "・いいね" : "");
   // 数を短く書く（1万をこえたら「1.2万」）
   const nfmt = (n) => (n >= 10000 ? (n / 10000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, "") + "万" : n.toLocaleString());
   // その場所の記事の数と、その場所の記事から「行った」人の累計（絞り込みに関係なく、その場所のすべて）
@@ -389,7 +391,7 @@
   function visibleRecords() {
     return D.records.filter((r) => {
       if (state.tag && !r.tags.includes(state.tag)) return false;
-      if (state.mode === "liked") return isLiked(r); // いいね：いいねした記事（の場所）だけ
+      if (state.likedOnly && !isLiked(r)) return false; // ♡：いいねした記事（の場所）だけ。お気に入り・エキスパート・すべての人と重ねる
       if (r.official || r.writer === "me") return true; // 自分で公開した記事も出す
       if (state.mode === "fav") return !!favKind(r.writer, r);
       if (state.mode === "group") {
@@ -431,15 +433,24 @@
     recs.forEach((r) => {
       const w = writerById[r.writer], fk = favKind(r.writer, r);
       const color = r.official ? "#E86B45" : fk ? w.color : "#A9B2AC";
-      if (r.type === "route") {
-        const strong = fk || r.official;
-        layer.line(r.spots.map((s) => [spotById[s.spot].lat, spotById[s.spot].lng]), {
-          color, weight: make ? 2.5 : strong ? 4 : 2.5, opacity: make ? 0.28 : strong ? 0.85 : 0.6, dash: r.official ? "6 6" : null,
-          onClick: make ? null : () => openArticle(r.id), // 線は1つの記事なので、押すとその記事へ
-        });
-      }
       // on：タグに合う場所（タグで絞っていなければ全部）。ほかの記事でタグに合うなら、そちらを使う
       const onSet = new Set(tagSpots(r, state.tag).map((x) => x.spot));
+      if (r.type === "route") {
+        const strong = fk || r.official;
+        const base = { dash: r.official ? "6 6" : null, onClick: make ? null : () => openArticle(r.id) }; // 線は1つの記事なので、押すとその記事へ
+        const onLine = { ...base, color, weight: make ? 2.5 : strong ? 4 : 2.5, opacity: make ? 0.28 : strong ? 0.85 : 0.6 };
+        // タグに関係のない場所につながる区間は、その場所の点と同じうすい灰色（続いている区間は1本の線にまとめる）
+        const offLine = { ...base, color: OFF_GRAY, weight: make ? 2.5 : strong ? 3 : 2.5, opacity: make ? 0.5 : 1, z: -1 };
+        let run = null;
+        const flush = () => { if (run) layer.line(run.ll, run.on ? onLine : offLine); };
+        r.spots.forEach((x, i) => {
+          if (!i) return;
+          const a = r.spots[i - 1].spot, on = onSet.has(a) && onSet.has(x.spot);
+          if (!run || run.on !== on) { flush(); run = { on, ll: [spotLL(a)] }; }
+          run.ll.push(spotLL(x.spot));
+        });
+        flush();
+      }
       r.spots.forEach((s) => {
         const sp = spotById[s.spot], on = onSet.has(s.spot);
         if (on) pts.push([sp.lat, sp.lng]); // 地図を合わせるのは、タグに合う場所だけ
@@ -527,6 +538,7 @@
     };
   }
   const spotLL = (id) => [spotById[id].lat, spotById[id].lng];
+  const OFF_GRAY = "#C9CFCB"; // タグに関係のない、ルートの途中の場所につながる線（点は css の .pin.off）
 
   // 長押し（指でもマウスでも）。動いたら長押しにしない。長押しのあとに来るクリックは無視する
   const LONG_MS = 480;
@@ -823,7 +835,7 @@
     $("#top-search").hidden = st !== "explore";
     $("#stage-bar").hidden = st === "explore";
     $("#chips").hidden = st === "follow";
-    $("#modes").hidden = st === "follow";
+    $("#mode-row").hidden = st === "follow";
     if (st === "redo") {
       $("#stage-bar").innerHTML = `<div class="stage-title"><b>組み直す</b><span>行く場所を地図で選ぶ</span></div>${searchBtn}`;
     } else if (st !== "explore") {
@@ -833,8 +845,13 @@
   function renderChips() {
     const tags = [null, ...D.TAGS];
     $("#chips").innerHTML = tags.map((t) => `<button class="chip ${state.tag === t ? "on" : ""}" data-tag="${t || ""}">${t || "すべて"}</button>`).join("");
-    const modes = [["fav", "お気に入り"], ["group", "エキスパート"], ["all", "すべての人"], ["liked", "いいね"]];
-    $("#modes").innerHTML = modes.map(([k, l]) => `<button class="${state.mode === k ? "on" : ""} ${k === "liked" ? "m-like" : ""}" data-mode="${k}">${k === "liked" ? IC.heartf : ""}${l}</button>`).join("");
+    $("#modes").innerHTML = Object.entries(MODE_NAMES).map(([k, l]) => `<button class="${state.mode === k ? "on" : ""}" data-mode="${k}">${l}</button>`).join("");
+    // ♡：押すと、いいねした記事の場所だけ（中が塗られる）。もう一度押すと戻る
+    const lf = $("#like-filter"), on = state.likedOnly;
+    lf.classList.toggle("on", on);
+    lf.setAttribute("aria-pressed", on ? "true" : "false");
+    lf.title = on ? "いいねした場所だけを出しています（押すと戻す）" : "いいねした場所だけを出す";
+    lf.innerHTML = on ? IC.heartf : IC.heart;
   }
 
   /* ---------- 下のシート（探す：記事／つくる：予定表／たどる：予定） ---------- */
@@ -880,8 +897,9 @@
     if (favs.length) html += `<div class="section-label">お気に入りの書き手</div>` + favs.map(recordCard).join("");
     if (others.length) html += `<div class="section-label">${state.mode === "group" ? "エキスパート（このタグの記録が多い人たち）" : "ほかの書き手"}</div>` + others.map(recordCard).join("");
     if (off.length) html += `<div class="section-label">公式（自治体・企業）</div>` + off.map(recordCard).join("");
-    if (!all.length) html = state.mode === "liked"
-      ? `<div class="empty">${state.tag ? "このタグで、いいねした記事はありません。" : "いいねした記事はまだありません。"}<br>記事を読んで、行ってみたいと思ったら ♡ いいね を押すと、その場所がここと地図に出ます。</div>`
+    const within = [state.tag && `「${esc(state.tag)}」`, state.mode !== "all" && MODE_NAMES[state.mode]].filter(Boolean).join("・");
+    if (!all.length) html = state.likedOnly
+      ? `<div class="empty">${within ? `${within}の記事で、いいねしたものはまだありません。` : "いいねした記事はまだありません。"}<br>記事を読んで、行ってみたいと思ったら ♡ いいね を押すと、その場所がここと地図に出ます。${state.mode !== "all" ? "<br>「すべての人」にすると、ほかの人の記事でいいねしたものも出ます。" : ""}</div>`
       : `<div class="empty">この条件の記事はまだありません。<br>「エキスパート」に切り替えてみてください。</div>`;
     else if (!recs.length) html = `<div class="empty">地図に映っている範囲には、記事がありません。<br>地図を縮小するか、動かしてみてください。<br><br><button class="btn ghost small" data-act="fit-all">記事のある場所を表示する（${all.length}件）</button></div>`;
     $("#sheet-body").innerHTML = foundCard() + html;
@@ -3733,6 +3751,7 @@
     const refilter = () => { renderChips(); drawMap(stage() === "explore" && !state.place); if (stage() === "explore") scheduleArea(); else renderSheet(); };
     $("#chips").addEventListener("click", (e) => { const b = e.target.closest("[data-tag]"); if (!b) return; state.tag = b.dataset.tag || null; refilter(); });
     $("#modes").addEventListener("click", (e) => { const b = e.target.closest("[data-mode]"); if (!b) return; state.mode = b.dataset.mode; refilter(); });
+    $("#like-filter").addEventListener("click", () => { state.likedOnly = !state.likedOnly; refilter(); });
     $("#stage-bar").addEventListener("click", (e) => {
       const b = e.target.closest("[data-stage]"); if (b) openPlan(b.dataset.stage);
       if (e.target.closest('[data-act="search"]')) openPlaceSearch({ title: "見つけた場所は、予定に入れられます", onPick: showFound });

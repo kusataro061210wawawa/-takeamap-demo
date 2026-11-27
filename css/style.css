@@ -1384,9 +1384,6 @@ html.sheet-dragging, html.sheet-dragging * { -webkit-user-select: none !importan
 .bubble .blk .i { width: 11px; height: 11px; }
 
 /* 上の切り替え：いいね */
-.modes button.m-like { display: inline-flex; align-items: center; gap: 3px; }
-.modes button.m-like .i { width: 12px; height: 12px; color: var(--like); vertical-align: 0; }
-.modes button.m-like.on { background: var(--like-bg); color: var(--like-ink); }
 
 /* 一覧・読むのカード：いいね済みの印（数は出さない） */
 .badge.liked { display: inline-flex; align-items: center; gap: 2px; background: var(--like-bg); color: var(--like-ink); }
@@ -1417,7 +1414,24 @@ html.sheet-dragging, html.sheet-dragging * { -webkit-user-select: none !importan
 /* 上の切り替えが4つになったので、スマホの幅でも1行に（入りきらない幅では横にずらせる） */
 .modes { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .modes::-webkit-scrollbar { display: none; }
-.modes button { flex: none; white-space: nowrap; padding: 4px 8px; }
+.modes button { flex: none; white-space: nowrap; padding: 4px 10px; }
 
 /* ===== 2026-11-27（5回目）：タグで絞ったとき、タグに関係のない、ルートの途中の場所 ===== */
 .pin.off { width: 12px; height: 12px; background: #D3D8D4; border: 2px solid var(--paper); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+
+/* ===== 2026-11-27（6回目）：いいねのふちを落ち着いた色に・♡の絞り込みを別のボタンに ===== */
+/* いいねした場所のふち：彩度を下げた明るいピンク。太さは白いふちと同じ（小さな灰色のピンは少し細く） */
+:root { --like-rim: #E784A8; }
+.pin.lk { border-color: var(--like-rim); border-width: 2.5px; }
+.pin.other.lk { border-width: 2px; }
+.pin-cluster.lk { border-color: var(--like-rim); }
+
+/* お気に入り／エキスパート／すべての人 と、その隣の ♡（重ねて使う） */
+.mode-row { display: flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%; margin-top: 6px; }
+.mode-row .modes { margin-top: 0; min-width: 0; }
+.like-filter { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: var(--paper); border: 1.5px solid transparent; box-shadow: 0 1px 4px rgba(0,0,0,.1); color: var(--like); }
+.like-filter .i { width: 18px; height: 18px; }
+.like-filter.on { background: var(--like-bg); border-color: var(--like); }
+.like-filter.on .i { animation: likepop .3s ease; }
+.like-filter:active { transform: scale(.94); }
+@media (prefers-reduced-motion: reduce) { .like-filter.on .i { animation: none; } }
