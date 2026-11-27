@@ -84,6 +84,7 @@
     foot: icf('<ellipse cx="8.2" cy="12.4" rx="2.7" ry="4.3" transform="rotate(-14 8.2 12.4)"/><ellipse cx="7.2" cy="19.3" rx="1.9" ry="1.7"/><ellipse cx="15.8" cy="6.6" rx="2.7" ry="4.3" transform="rotate(14 15.8 6.6)"/><ellipse cx="16.8" cy="13.5" rx="1.9" ry="1.7"/>'),
     reader: icf('<circle cx="12" cy="7.4" r="4.1"/><path d="M3.8 21.5c0-4.9 3.7-8.4 8.2-8.4s8.2 3.5 8.2 8.4z"/>'),
     doc: ic('<path d="M6.5 3.5h7.5l4 4v13h-11.5z"/><path d="M13.5 3.5v4.5h4.5M9.5 12.5h5M9.5 16h5"/>'),
+    heartf: icf('<path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0112 7.3a4.3 4.3 0 017.5 2.5C19.5 15.4 12 20 12 20z"/>'), // いいね（塗り）
   };
   const VIS = [["public", "公開"], ["member", "メンバー限定"], ["private", "非公開"]];
   const visLabel = (k) => (VIS.find((v) => v[0] === k) || VIS[0])[1];
@@ -226,7 +227,7 @@
      前の版でこの端末に入れた Map Tiles API のキーが残っていれば消す */
   try { localStorage.removeItem("tam-google-key"); } catch (e) { /* なくてもよい */ }
   // ピンの見た目：{ html, size, anchor }（anchor：地図の位置に合わせる、ピンの中の点）
-  const PIN_SIZE = { fav: 26, official: 26, mine: 22, saved: 20, other: 16, num: 28, found: 32 };
+  const PIN_SIZE = { fav: 26, official: 26, mine: 22, saved: 20, other: 16, num: 28, found: 32, off: 12 }; // off：タグに関係のない、ルートの途中の場所
   function divPin(cls, inner, extra = "") {
     const n = PIN_SIZE[cls.split(" ")[0]] || 22;
     return { html: `<div class="pin ${cls}" style="${extra}">${inner || ""}</div>`, size: [n, n], anchor: [n / 2, n / 2] };
@@ -252,6 +253,24 @@
     const h = hashOf(r.id);
     return Math.round((r.went || 0) * (1.8 + (h % 23) / 10)) + 12 + (h % 47);
   }
+  /* いいね：読んだ人が「行ってみたい」と思った記事に付ける、その人だけの印（V.liked：記事の id）。
+     いいねの数は読む人には見せない。書いた人だけが、自分の記事の「行った」と「いいね」の数を見られる。
+     地図では、いいねした記事の場所のピンのふちをピンクにし、まだいいねしていない場所のピンは色をうすくする */
+  const isLiked = (r) => !!r && V.liked.includes(r.id);
+  const likesOf = (r) => r.likes || 0; // 書いた人にだけ見せる数
+  function likedSpots() {
+    const set = new Set();
+    D.records.forEach((r) => { if (isLiked(r)) r.spots.forEach((x) => set.add(x.spot)); });
+    return set;
+  }
+  function toggleLike(r) {
+    const i = V.liked.indexOf(r.id), on = i < 0;
+    if (on) V.liked.push(r.id); else V.liked.splice(i, 1);
+    r.likes = Math.max(0, likesOf(r) + (on ? 1 : -1));
+    toast(on ? "いいねしました。地図で、この記事の場所のピンのふちがピンクになります" : "いいねを外しました");
+    return on;
+  }
+  const modeLabel = () => ({ fav: "お気に入り", group: "エキスパート", all: "すべての人", liked: "いいね" })[state.mode];
   // 数を短く書く（1万をこえたら「1.2万」）
   const nfmt = (n) => (n >= 10000 ? (n / 10000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, "") + "万" : n.toLocaleString());
   // その場所の記事の数と、その場所の記事から「行った」人の累計（絞り込みに関係なく、その場所のすべて）
@@ -356,11 +375,21 @@
     if (!state.place) $("#sheet-body").classList.add("waiting");
     areaTimer = setTimeout(updateArea, delay);
   }
-  const inArea = (r) => !areaBounds || r.spots.some((s) => areaBounds.contains([spotById[s.spot].lat, spotById[s.spot].lng]));
+  /* タグで絞ったとき、その記事の中でタグに合う場所。ルートの記事は、タグと関係のない場所（例：ラーメンで探したときの神社）を外す。
+     旅行・聖地巡礼のように出かけ方全体につくタグは全部の場所。1か所の記事と、場所ごとに合う所がひとつもないルートも全部の場所 */
+  const WHOLE_TAGS = ["旅行", "聖地巡礼"];
+  function tagSpots(r, tag) {
+    if (!tag || r.spots.length < 2 || WHOLE_TAGS.includes(tag)) return r.spots;
+    const hit = r.spots.filter((x) => (x.tags || []).includes(tag) || ((spotById[x.spot] || {}).tags || []).includes(tag));
+    return hit.length ? hit : r.spots;
+  }
+  // 地図に映っている範囲の記事か（タグで絞っているときは、タグに合う場所で見る）
+  const inArea = (r) => !areaBounds || tagSpots(r, state.tag).some((s) => areaBounds.contains([spotById[s.spot].lat, spotById[s.spot].lng]));
 
   function visibleRecords() {
     return D.records.filter((r) => {
       if (state.tag && !r.tags.includes(state.tag)) return false;
+      if (state.mode === "liked") return isLiked(r); // いいね：いいねした記事（の場所）だけ
       if (r.official || r.writer === "me") return true; // 自分で公開した記事も出す
       if (state.mode === "fav") return !!favKind(r.writer, r);
       if (state.mode === "group") {
@@ -409,35 +438,47 @@
           onClick: make ? null : () => openArticle(r.id), // 線は1つの記事なので、押すとその記事へ
         });
       }
+      // on：タグに合う場所（タグで絞っていなければ全部）。ほかの記事でタグに合うなら、そちらを使う
+      const onSet = new Set(tagSpots(r, state.tag).map((x) => x.spot));
       r.spots.forEach((s) => {
-        const sp = spotById[s.spot];
-        pts.push([sp.lat, sp.lng]);
-        const rank = r.official ? 2 : fk ? 3 : 1;
-        if (seen[sp.id] && seen[sp.id].rank >= rank) return;
-        seen[sp.id] = { rank, r, s, sp, color, fk };
+        const sp = spotById[s.spot], on = onSet.has(s.spot);
+        if (on) pts.push([sp.lat, sp.lng]); // 地図を合わせるのは、タグに合う場所だけ
+        const rank = r.official ? 2 : fk ? 3 : 1, cur = seen[sp.id];
+        if (cur && (cur.on > on || (cur.on === on && cur.rank >= rank))) return;
+        seen[sp.id] = { rank, r, s, sp, color, fk, on };
       });
     });
     // つくる：登録した場所も予定に入れられるように出す
     if (make) V.saved.forEach((x) => {
       if (seen[x.spot]) return;
       const b = bestRecordFor(x.spot);
-      seen[x.spot] = { rank: 0, r: b && b.r, s: b && b.s, sp: spotById[x.spot], saved: true };
+      seen[x.spot] = { rank: 0, r: b && b.r, s: b && b.s, sp: spotById[x.spot], saved: true, on: true };
     });
     // 探す：選んでいる場所は、絞り込みでその場所の記事が隠れても出しておく
     if (!make && state.place && !seen[state.place] && spotById[state.place]) {
       const b = bestRecordFor(state.place);
-      if (b) seen[state.place] = { rank: 0, r: b.r, s: b.s, sp: spotById[state.place], color: "#A9B2AC", fk: null };
+      if (b) seen[state.place] = { rank: 0, r: b.r, s: b.s, sp: spotById[state.place], color: "#A9B2AC", fk: null, on: true };
     }
     // 引きの地図では、近い場所をまとめて「場所の数」の丸にする（記事がいくつあっても、1つの場所は1と数える）
-    const { singles, groups } = clusterPlaces(Object.values(seen).filter((x) => !inDraft.has(x.sp.id)), (x) => !make && x.sp.id === state.place);
-    groups.forEach(addCluster);
+    const lks = likedSpots();
+    const places = Object.values(seen).filter((x) => !inDraft.has(x.sp.id));
+    // タグに関係のない、ルートの途中の場所：うすい灰色の小さな点（数の丸にはまとめず、吹き出しも出さない。押せば、その場所の記事）
+    places.filter((x) => !x.on).forEach(({ r, s, sp }) => {
+      const sel = !make && sp.id === state.place;
+      const icon = { ...divPin(sel ? "off sel" : "off", ""), title: `${sp.name}（「${state.tag}」とは関係のない、ルートの途中の場所）` };
+      addPin([sp.lat, sp.lng], icon, { half: (PIN_SIZE.off / 2) * (sel ? 1.35 : 1), prio: -1, sp, r, s, off: true }, () => (make ? toggleDraftSpot(sp.id) : selectPlace(sp.id)), sel ? 800 : -20);
+    });
+    const { singles, groups } = clusterPlaces(places.filter((x) => x.on), (x) => !make && x.sp.id === state.place);
+    groups.forEach((g) => addCluster(g, g.some((x) => lks.has(x.sp.id))));
     singles.forEach(({ rank, r, s, sp, color, fk, saved }) => {
       const kind = saved ? "saved" : r.official ? "official" : fk ? "fav" : "other";
-      const sel = !make && sp.id === state.place, cls = sel ? kind + " sel" : kind;
-      const icon = kind === "saved" ? divPin("saved", "") : kind === "official" ? divPin(cls, "公式") : kind === "fav" ? divPin(cls, artSvg(writerById[r.writer]) || esc(initial(writerById[r.writer])[0]), `background:${color}`) : divPin(cls, "");
+      // いいねした場所：ふちがピンク（lk）。まだの場所：ふちは白のまま、中の色をうすく（nl）。登録した場所の白いピンはそのまま
+      const lk = lks.has(sp.id), sel = !make && sp.id === state.place;
+      const cls = kind + (kind === "saved" ? "" : lk ? " lk" : " nl") + (sel ? " sel" : "");
+      const icon = kind === "saved" ? divPin(cls, "") : kind === "official" ? divPin(cls, "公式") : kind === "fav" ? divPin(cls, artSvg(writerById[r.writer]) || esc(initial(writerById[r.writer])[0]), `background:${color}`) : divPin(cls, "");
       if (!make) icon.title = sp.name;
       // 探す：押すと、下のシートをその場所の記事だけにする（1つの場所に記事がいくつもあることがあるので、記事へは直接飛ばない）
-      addPin([sp.lat, sp.lng], icon, { half: (PIN_SIZE[kind] / 2) * (sel ? 1.35 : 1), prio: sel ? 99 : rank, sp, r, s, sel }, () => (make ? toggleDraftSpot(sp.id) : selectPlace(sp.id)), sel ? 800 : 0);
+      addPin([sp.lat, sp.lng], icon, { half: (PIN_SIZE[kind] / 2) * (sel ? 1.35 : 1), prio: sel ? 99 : rank, sp, r, s, sel, lk }, () => (make ? toggleDraftSpot(sp.id) : selectPlace(sp.id)), sel ? 800 : 0);
       if (!make && state.mode === "group") {
         const t = state.tag || Object.keys(sp.groupLikes || {})[0];
         const n = sp.groupLikes && sp.groupLikes[t];
@@ -465,14 +506,14 @@
     return { singles: gs.filter((g) => g.items.length === 1).map((g) => g.items[0]), groups: gs.filter((g) => g.items.length > 1).map((g) => g.items) };
   }
   // まとめた場所の丸（中の数は場所の数）。押すと、その場所が全部見えるところまで拡大する
-  function addCluster(list) {
+  function addCluster(list, lk) {
     const lls = list.map((x) => [x.sp.lat, x.sp.lng]);
     const ll = [lls.reduce((a, q) => a + q[0], 0) / lls.length, lls.reduce((a, q) => a + q[1], 0) / lls.length];
     const n = list.length, d = n >= 100 ? 44 : n >= 10 ? 38 : 32;
     pinInfo.push({ ll, half: d / 2, prio: -1, block: true }); // 吹き出しが丸に重ならないように（丸には吹き出しを出さない）
     layer.marker(ll, {
-      html: `<div class="pin-cluster" style="width:${d}px;height:${d}px">${n}</div>`, size: [d, d], anchor: [d / 2, d / 2], z: 700,
-      title: `${n}か所（押すと拡大）`,
+      html: `<div class="pin-cluster ${lk ? "lk" : ""}" style="width:${d}px;height:${d}px">${n}</div>`, size: [d, d], anchor: [d / 2, d / 2], z: 700,
+      title: `${n}か所${lk ? "（いいねした場所あり）" : ""}（押すと拡大）`,
       onClick: () => map.fit(lls, { pad: 0.25, maxZoom: CLUSTER_Z + 1, top: topInset() + 40, left: 40, right: 40, bottom: sheetOver() + 40 }),
     });
   }
@@ -711,7 +752,7 @@
     if (!map || !bubbleLayer) return;
     bubbleLayer.clear();
     if (!$("#view-map").classList.contains("active")) return;
-    placeBubbles(map, bubbleLayer, pinInfo.map((p) => ({ ...p, b: p.block ? null : mainBubble(p) })), topInset() + 4, map.getSize().y - sheetOver() - 4);
+    placeBubbles(map, bubbleLayer, pinInfo.map((p) => ({ ...p, b: p.block || p.off ? null : mainBubble(p) })), topInset() + 4, map.getSize().y - sheetOver() - 4);
   }
   // 探す・つくる・たどる の吹き出しの中身
   function mainBubble(p) {
@@ -722,7 +763,7 @@
     return {
       cls: `${p.num ? (p.fl ? "is-fl" : "is-num") : ""} ${p.r ? "" : "no-rec"} ${p.sel ? "is-sel" : ""}`, num: p.num, name: p.sp.name,
       title: p.r ? "「" + p.r.title + "」" : p.sp.kind + "（記事はまだありません）",
-      rating: p.r && p.s.rating, who: w && w.name, go: p.r && !ex ? "記事 ›" : "", photo: ph && ph.src,
+      rating: p.r && p.s.rating, who: w && w.name, go: p.r && !ex ? "記事 ›" : "", photo: ph && ph.src, lk: !!p.lk,
       stats: p.r ? { went: p.r.went || 0, reads: readsOf(p.r) } : null, // 右上：この記事から行った人・最近読んだ人
       out: ps && ps.n > 1 ? { more: ps.n - 1, went: ps.went } : null,
       onClick: !p.r ? null : ex ? () => selectPlace(p.sp.id) : () => openArticle(p.r.id),
@@ -766,7 +807,7 @@
     const html = `<div class="bubble b-${pos} ${b.cls || ""} ${src ? "has-ph" : ""}">
       ${src ? `<img class="bph" src="${src}" alt="" loading="lazy">` : ""}
       <span class="btx">
-        <span class="brow"><span class="bn">${b.num ? `<i>${b.num}</i>` : ""}${esc(b.name)}</span>${bst}</span>
+        <span class="brow"><span class="bn">${b.num ? `<i>${b.num}</i>` : ""}${b.lk ? `<span class="blk" title="いいねした場所">${IC.heartf}</span>` : ""}${esc(b.name)}</span>${bst}</span>
         <span class="bt">${esc(b.title)}</span>
         ${b.rating || b.who ? `<span class="bm">${b.rating ? ratingTag(b.rating) : ""}<span class="bw">${esc(b.who || "")}</span>${b.go ? `<span class="bgo">${esc(b.go)}</span>` : ""}</span>` : ""}
       </span>${bout}
@@ -792,8 +833,8 @@
   function renderChips() {
     const tags = [null, ...D.TAGS];
     $("#chips").innerHTML = tags.map((t) => `<button class="chip ${state.tag === t ? "on" : ""}" data-tag="${t || ""}">${t || "すべて"}</button>`).join("");
-    const modes = [["fav", "お気に入り"], ["group", "同じ趣味の人たち"], ["all", "すべての人"]];
-    $("#modes").innerHTML = modes.map(([k, l]) => `<button class="${state.mode === k ? "on" : ""}" data-mode="${k}">${l}</button>`).join("");
+    const modes = [["fav", "お気に入り"], ["group", "エキスパート"], ["all", "すべての人"], ["liked", "いいね"]];
+    $("#modes").innerHTML = modes.map(([k, l]) => `<button class="${state.mode === k ? "on" : ""} ${k === "liked" ? "m-like" : ""}" data-mode="${k}">${k === "liked" ? IC.heartf : ""}${l}</button>`).join("");
   }
 
   /* ---------- 下のシート（探す：記事／つくる：予定表／たどる：予定） ---------- */
@@ -821,8 +862,8 @@
       ${ph ? `<img class="card-thumb" src="${img(ph, true)}" alt="" loading="lazy">` : ""}
       <div class="card-top">${avatar(w)}<b>${esc(w.name)}</b>${badges(w, r)}</div>
       <h3>${esc(r.title)}</h3>
-      <div class="meta"><span>${kind}</span><span>${esc(r.tags.join("・"))}</span><span>「行った」${r.went}人</span></div>
-      <div class="meta" style="margin-top:4px">${ratingTag(best)}${r.stamp ? '<span class="badge official">スタンプラリー</span>' : ""}${lock}</div>
+      <div class="meta"><span>${kind}</span><span>${esc(r.tags.join("・"))}</span><span>「行った」${r.went}人</span>${w.self ? `<span>いいね ${likesOf(r)}人</span>` : ""}</div>
+      <div class="meta" style="margin-top:4px">${ratingTag(best)}${isLiked(r) ? `<span class="badge liked">${IC.heartf}いいね済み</span>` : ""}${r.stamp ? '<span class="badge official">スタンプラリー</span>' : ""}${lock}</div>
     </button>`;
   }
 
@@ -833,13 +874,15 @@
     const off = recs.filter((r) => r.official);
     const favs = recs.filter((r) => !r.official && favKind(r.writer, r));
     const others = recs.filter((r) => !r.official && !favKind(r.writer, r));
-    const label = state.mode === "fav" ? "お気に入り" : state.mode === "group" ? "同じ趣味の人たち" : "すべての人";
+    const label = modeLabel();
     $("#sheet-head").innerHTML = `<b>${esc(state.tag || "すべて")}の記事</b><small>${areaBounds ? "この範囲 " : ""}${recs.length}件・${label}</small>`;
     let html = "";
     if (favs.length) html += `<div class="section-label">お気に入りの書き手</div>` + favs.map(recordCard).join("");
-    if (others.length) html += `<div class="section-label">${state.mode === "group" ? "同じ趣味の記録が多い人たち" : "ほかの書き手"}</div>` + others.map(recordCard).join("");
+    if (others.length) html += `<div class="section-label">${state.mode === "group" ? "エキスパート（このタグの記録が多い人たち）" : "ほかの書き手"}</div>` + others.map(recordCard).join("");
     if (off.length) html += `<div class="section-label">公式（自治体・企業）</div>` + off.map(recordCard).join("");
-    if (!all.length) html = `<div class="empty">この条件の記事はまだありません。<br>「同じ趣味の人たち」に切り替えてみてください。</div>`;
+    if (!all.length) html = state.mode === "liked"
+      ? `<div class="empty">${state.tag ? "このタグで、いいねした記事はありません。" : "いいねした記事はまだありません。"}<br>記事を読んで、行ってみたいと思ったら ♡ いいね を押すと、その場所がここと地図に出ます。</div>`
+      : `<div class="empty">この条件の記事はまだありません。<br>「エキスパート」に切り替えてみてください。</div>`;
     else if (!recs.length) html = `<div class="empty">地図に映っている範囲には、記事がありません。<br>地図を縮小するか、動かしてみてください。<br><br><button class="btn ghost small" data-act="fit-all">記事のある場所を表示する（${all.length}件）</button></div>`;
     $("#sheet-body").innerHTML = foundCard() + html;
   }
@@ -851,9 +894,9 @@
     const order = (a, b) => score(b) - score(a) || (b.went || 0) - (a.went || 0);
     const hit = all.filter((r) => vis.has(r.id)).sort(order), rest = all.filter((r) => !vis.has(r.id)).sort(order);
     const ps = placeStats(sp.id);
-    const label = state.mode === "fav" ? "お気に入り" : state.mode === "group" ? "同じ趣味の人たち" : "すべての人";
+    const label = modeLabel(), liked = all.some(isLiked);
     $("#sheet-head").innerHTML = `<button class="pl-back" data-act="place-clear" aria-label="この範囲の記事に戻る">${IC.back}</button><b>${esc(sp.name)}</b><small>記事${all.length}件・${IC.foot}累計${nfmt(ps.went)}人</small>`;
-    let html = `<div class="pl-sub">${esc(sp.kind)}${sp.addr ? "・" + esc(sp.addr) : ""}<span>この場所の記事だけを出しています</span></div>`;
+    let html = `<div class="pl-sub">${esc(sp.kind)}${sp.addr ? "・" + esc(sp.addr) : ""}<span>この場所の記事だけを出しています</span>${liked ? `<span class="pl-lk">${IC.heartf}いいねした記事あり</span>` : ""}</div>`;
     html += hit.map(recordCard).join("");
     if (rest.length) html += `<div class="section-label">いまの絞り込み（${esc(state.tag || "すべて")}・${label}）には入らない記事</div>` + rest.map(recordCard).join("");
     if (!all.length) html += `<div class="empty">この場所の記事はまだありません。</div>`;
@@ -1691,17 +1734,24 @@
     const ctaLabel = appending ? (!fresh ? "この記事の場所は、もう予定に入っています" : n > 1 ? `このルートを予定の後ろに足す（${fresh}か所）` : "この場所を予定に足す") : (n > 1 ? "このルートで予定をつくる（無料）" : "この場所から予定をつくる");
     const cta = pv ? "" : `<div class="sticky-cta"><button class="btn accent block" id="make-btn" ${appending && !fresh ? "disabled" : ""}>${ICON.calplus}${ctaLabel}</button>${appending ? `<div class="small" style="text-align:center;margin-top:6px">${redoing ? "組み直している予定" : `つくっている予定（${state.draft.stops.length}か所）`}の後ろに足します</div>` : ""}</div>`;
     const mmId = pv ? "mm-art-pv" : "mm-art";
+    // いいね：読む人には数を出さず、その人が付けたかどうかだけ。書いた人には「行った」と「いいね」の数
+    const likeBtn = (big) => `<button class="like-btn ${big ? "big" : ""} ${isLiked(r) ? "on" : ""}" data-like aria-pressed="${isLiked(r)}">${isLiked(r) ? IC.heartf : IC.heart}<span>${isLiked(r) ? "いいね済み" : "いいね"}</span></button>`;
+    const likeTop = pv ? "" : w.self
+      ? `<div class="own-st">${IC.foot}<span>行った <b>${r.went}</b>人</span>${IC.heartf}<span>いいね <b>${likesOf(r)}</b>人</span><small>いいねの数は、書いたあなただけに見えます</small></div>`
+      : `<div class="like-row">${likeBtn(false)}<small>行ってみたいと思ったら。いいねした記事の場所は、地図のピンのふちがピンクになります（数はほかの人には見えません）</small></div>`;
+    const likeEnd = pv || w.self ? "" : `<div class="like-end"><b>この記事を読んで、行ってみたくなりましたか？</b>${likeBtn(true)}</div>`;
     p.innerHTML = (pv ? "" : bar(w.official ? (w.shop ? "店の公式" : "公式の特集") : "記事")) + `${carouselHTML(articlePhotos(r))}<div class="pad">
       <div class="writer-row"><button data-writer="${w.id}" style="display:flex;align-items:center;gap:10px">${avatar(w)}<span class="name">${esc(w.name)}</span></button>${badges(w, r)}<span style="margin-left:auto">${favBtn}</span></div>
       ${collab}
       <div class="h1">${esc(r.title)}</div>
       <div class="meta"><span>${esc(r.date)}</span><span>${n > 1 ? `ルート ${n}か所` : "1か所の記録"}</span><span>記事を見て「行った」${r.went}人</span></div>
+      ${likeTop}
       <div class="kv" style="margin-top:6px">${r.tags.map((t) => `<span>#${esc(t)}</span>`).join("")}${r.stamp ? "<span>スタンプラリー（架空の企画）</span>" : ""}${r.vis === "member" ? `<span class="kv-member">${IC.lock}メンバー限定</span>` : ""}</div>
       ${r.leadBlocks && r.leadBlocks.length ? `<div class="ab lead-ab">${flowHTML(r.leadBlocks)}</div>` : r.lead ? `<p class="lead">${esc(r.lead)}</p>` : ""}
       <div class="minimap" id="${mmId}"></div>
       ${routeLink}
       ${infoAll}
-      ${stops}${lock}
+      ${stops}${lock}${likeEnd}
     </div>${cta}`;
     // 写真を押すと大きく見る
     $$("[data-full]", p).forEach((im) => im.addEventListener("click", () => openPhoto(img(im.dataset.full), im.dataset.cap)));
@@ -1716,6 +1766,14 @@
     $$("[data-writer]", p).forEach((b) => b.addEventListener("click", () => openWriter(b.dataset.writer)));
     const fb = $("#fav-btn", p);
     if (fb) fb.addEventListener("click", () => { toggleFav(w.id); paint(); });
+    // いいね（上と下のボタンをそろえる。地図・一覧は、記事を閉じたときに描き直す）
+    $$("[data-like]", p).forEach((b) => b.addEventListener("click", () => {
+      const on = toggleLike(r);
+      $$("[data-like]", p).forEach((x) => {
+        x.classList.toggle("on", on); x.setAttribute("aria-pressed", on);
+        x.innerHTML = `${on ? IC.heartf : IC.heart}<span>${on ? "いいね済み" : "いいね"}</span>`;
+      });
+    }));
     const jb = $("#join-btn", p);
     if (jb) jb.addEventListener("click", () => { V.memberships.push(w.id); toast("デモ：メンバーになりました"); paint(); });
     $("#make-btn", p).addEventListener("click", () => useRecord(r.id, appending ? "append" : "replace"));
@@ -1995,10 +2053,10 @@
     if (!big) {
       return `<div class="tile cover ${pcls}" role="button" tabindex="0" data-rec="${r.id}" style="${coverStyle(r, false)}">${head}
         <span class="cover-body"><span class="cover-title">${esc(r.title)}</span>
-        <span class="cover-who">${avatar(w, "sm")}<b>${esc(w.name)}</b>${make}</span></span></div>`;
+        <span class="cover-who">${avatar(w, "sm")}<b>${esc(w.name)}</b>${isLiked(r) ? `<span class="lk-dot" title="いいね済み">${IC.heartf}</span>` : ""}${make}</span></span></div>`;
     }
     const lock = r.member || r.vis === "member" ? `<span>${ICON.lock.replace('width="16" height="16"', 'width="13" height="13"')} メンバー限定${r.member ? "あり" : ""}</span>` : "";
-    const mark = !w.official && fk === "fav" ? '<span class="badge fav">お気に入り</span>' : ""; // 公式は表紙の左上に印
+    const mark = (!w.official && fk === "fav" ? '<span class="badge fav">お気に入り</span>' : "") + (isLiked(r) ? `<span class="lk-dot" title="いいね済み">${IC.heartf}</span>` : ""); // 公式は表紙の左上に印
     return `<div class="hero cover ${pcls}" role="button" tabindex="0" data-rec="${r.id}" style="${coverStyle(r, true)}">${head}
       <span class="cover-body">
         <span class="cover-title">${esc(r.title)}</span>
@@ -2086,7 +2144,7 @@
         <div class="section-label">記録</div>
         ${state.myRecords.length ? "" : '<div class="small">まだ記録がありません。</div>'}
         ${state.myRecords.map((r) => `<div class="card"><h3 style="margin-top:0">${esc(r.title)}</h3><div class="meta"><span>${esc(r.date)}</span><span>${r.spots.length}か所</span></div>
-          ${r.spots.map((s, i) => `<button class="me-spot" data-mm="ms-${r.id}-${i}">${(s.photos || []).length ? `<img class="thumb" src="${s.photos[0]}" alt="" style="width:100%;height:120px">` : ""}<span class="me-spot-top"><b>${esc(s.name)}</b><span class="me-spot-go">地図で見る ›</span></span><span>${ratingTag(s.rating)} <span class="small">${s.pub && s.pub.recId ? "記事も公開中" : "自分だけ"}${(s.photos || []).length ? `・写真${s.photos.length}枚` : ""}</span></span><span class="small">${esc(s.note || "")}</span></button>`).join("")}</div>`).join("")}
+          ${r.spots.map((s, i) => `<button class="me-spot" data-mm="ms-${r.id}-${i}">${(s.photos || []).length ? `<img class="thumb" src="${s.photos[0]}" alt="" style="width:100%;height:120px">` : ""}<span class="me-spot-top"><b>${esc(s.name)}</b><span class="me-spot-go">地図で見る ›</span></span><span>${ratingTag(s.rating)} <span class="small">${s.pub && s.pub.recId ? `記事も公開中${recById[s.pub.recId] ? `（行った ${recById[s.pub.recId].went}人・いいね ${likesOf(recById[s.pub.recId])}人）` : ""}` : "自分だけ"}${(s.photos || []).length ? `・写真${s.photos.length}枚` : ""}</span></span><span class="small">${esc(s.note || "")}</span></button>`).join("")}</div>`).join("")}
         <div class="section-label">お気に入りの書き手</div>
         ${favs.map((w) => `<button class="card" data-writer="${w.id}"><div class="card-top">${avatar(w)}<b>${esc(w.name)}</b><span class="badge fav">お気に入り</span></div><div class="small" style="margin-top:4px">${esc(w.bio)}</div></button>`).join("")}
         ${tagFavs.map(({ w, t }) => `<button class="card" data-writer="${w.id}"><div class="card-top">${avatar(w)}<b>${esc(w.name)}</b><span class="badge tagfav">${esc(t.join("・"))}だけお気に入り</span></div></button>`).join("")}
@@ -2889,7 +2947,7 @@
       if (sp.user) sp.tags = [...new Set([...(sp.tags || []), ...(s.tags.length ? s.tags : r.tags).filter((t) => D.TAGS.includes(t))])];
     });
     const i = D.records.findIndex((x) => x.id === r.id);
-    if (i >= 0) { r.went = D.records[i].went || 0; D.records[i] = r; } else D.records.unshift(r);
+    if (i >= 0) { r.went = D.records[i].went || 0; r.likes = D.records[i].likes || 0; D.records[i] = r; } else D.records.unshift(r);
     recById[r.id] = r;
     if (map) { drawMap(false); if (stage() === "explore") renderSheet(); }
     return r;

@@ -1361,3 +1361,63 @@ html.sheet-dragging, html.sheet-dragging * { -webkit-user-select: none !importan
 .read-tabs button.on span::after { content: ""; position: absolute; left: -6px; right: -6px; bottom: 0; height: 4px; border-radius: 2px; background: var(--green); }
 .read-tabs button:active { background: rgba(18,61,43,.06); }
 .read-tabs + .feed { padding-top: 12px; }
+
+/* ===== 2026-11-27（4回目）：いいね・場所の数の丸を軽く ===== */
+:root { --like: #EE4C86; --like-bg: #FFE6EF; --like-ink: #C42A63; }
+
+/* 場所の数の丸：濃い緑だと重いので黄緑に（数字は濃い緑のままで読みやすく） */
+.pin-cluster { background: var(--lime); color: var(--green); border: 2.5px solid var(--paper); box-shadow: 0 0 0 3px rgba(18,61,43,.12), 0 1px 5px rgba(0,0,0,.28); }
+.gm-mk:hover .pin-cluster { background: #CBE45E; }
+.pin-cluster.lk { border-color: var(--like); }
+
+/* いいねした場所：ふちをピンクに（白いふちより少しだけ太く。うるさくならないよう、外の光はつけない） */
+.pin.lk { border-color: var(--like); border-width: 3px; }
+.pin.other.lk { border-width: 2.5px; }
+/* まだいいねしていない場所：ふちは白のまま、中の色をうすく（彩度を下げ、白をうすくかける） */
+.pin.nl { position: relative; filter: saturate(.4); }
+.pin.nl::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: rgba(255,255,255,.34); pointer-events: none; }
+.gm-mk:hover .pin.nl { filter: none; }
+.gm-mk:hover .pin.nl::after { opacity: 0; }
+
+/* 吹き出し：いいねした場所は名前の前に小さな ♥ */
+.bubble .blk { display: inline-flex; vertical-align: -1px; margin-right: 3px; color: var(--like); }
+.bubble .blk .i { width: 11px; height: 11px; }
+
+/* 上の切り替え：いいね */
+.modes button.m-like { display: inline-flex; align-items: center; gap: 3px; }
+.modes button.m-like .i { width: 12px; height: 12px; color: var(--like); vertical-align: 0; }
+.modes button.m-like.on { background: var(--like-bg); color: var(--like-ink); }
+
+/* 一覧・読むのカード：いいね済みの印（数は出さない） */
+.badge.liked { display: inline-flex; align-items: center; gap: 2px; background: var(--like-bg); color: var(--like-ink); }
+.badge.liked .i { width: 11px; height: 11px; }
+.pl-sub .pl-lk { display: inline-flex; align-items: center; gap: 2px; color: var(--like-ink); background: var(--like-bg); }
+.pl-sub .pl-lk .i { width: 11px; height: 11px; }
+.lk-dot { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--like); color: #fff; box-shadow: 0 0 0 1.5px rgba(255,255,255,.9); }
+.lk-dot .i { width: 12px; height: 12px; }
+
+/* 記事：いいねのボタン（上は小さく、本文の最後は大きく）。書いた人には「行った」「いいね」の数 */
+.like-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.like-row small { font-size: 11px; color: var(--gray); line-height: 1.45; }
+.like-btn { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 7px 14px; border-radius: 20px; border: 1.5px solid var(--like); background: #fff; color: var(--like-ink); font-weight: 800; font-size: 13.5px; }
+.like-btn .i { width: 17px; height: 17px; color: var(--like); }
+.like-btn.on { background: var(--like); color: #fff; }
+.like-btn.on .i { color: #fff; animation: likepop .3s ease; }
+.like-btn:active { transform: scale(.96); }
+.like-btn.big { padding: 10px 26px; font-size: 15px; }
+.like-btn.big .i { width: 20px; height: 20px; }
+@keyframes likepop { 0% { transform: scale(.6); } 60% { transform: scale(1.25); } 100% { transform: none; } }
+.like-end { margin: 22px 0 8px; padding: 16px; border-radius: 16px; background: #FFF3F7; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.like-end b { font-size: 14px; color: var(--ink); }
+.own-st { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 10px; padding: 9px 12px; border-radius: 12px; background: #F2F6D8; font-size: 13px; color: var(--green); }
+.own-st .i { width: 14px; height: 14px; }
+.own-st svg:nth-of-type(2) { color: var(--like); margin-left: 6px; }
+.own-st small { flex-basis: 100%; font-size: 11px; color: var(--gray); }
+@media (prefers-reduced-motion: reduce) { .like-btn.on .i { animation: none; } }
+/* 上の切り替えが4つになったので、スマホの幅でも1行に（入りきらない幅では横にずらせる） */
+.modes { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.modes::-webkit-scrollbar { display: none; }
+.modes button { flex: none; white-space: nowrap; padding: 4px 8px; }
+
+/* ===== 2026-11-27（5回目）：タグで絞ったとき、タグに関係のない、ルートの途中の場所 ===== */
+.pin.off { width: 12px; height: 12px; background: #D3D8D4; border: 2px solid var(--paper); box-shadow: 0 1px 2px rgba(0,0,0,.18); }

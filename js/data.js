@@ -76,7 +76,7 @@
      indoor: 屋内か（雨の組み直しに使う）。io: 画面に出す「屋内／屋外／屋内・屋外」
      hours: 組み直し・つくるで使う営業時間（1日の中の開く〜閉まる。null = 時間の制約なし）。rest: 中休み
      hoursText / closed / priceText / addr: 記事に出す、書き手が入力した値
-     groupLikes: 同じ趣味の記録が多い人たちのうち「また行きたい」の人数（仮） */
+     groupLikes: エキスパート（同じタグの記録が多い人たち）のうち「また行きたい」の人数（仮） */
   const spots = [
     // 大宮（デモの舞台）
     { id: "omiya-lib", name: "さいたま市大宮図書館", lat: 35.9050, lng: 139.6293, tags: ["図書館建築", "旅行"], kind: "建築", indoor: true, hours: { open: "09:00", close: "20:00" }, price: 0, groupLikes: { "図書館建築": 9 } },
@@ -496,6 +496,8 @@
   const viewer = {
     name: "Aさん",
     favorites: ["kusataro", "yu"],          // お気に入りの書き手
+    // いいねした記事（読んで、行ってみたいと思った記事）。地図でその記事の場所のピンのふちがピンクになる。数はほかの人には見せない
+    liked: ["o3", "k8", "y5"],
     tagFavorites: { minami: ["ラーメン"] }, // タグだけお気に入り
     memberships: [],                         // 入っているメンバーシップ（なし）
     plan: "free",                            // free / premium
