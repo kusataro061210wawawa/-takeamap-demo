@@ -1,5 +1,5 @@
 /* Take A Map デモ用のデータ。
-   - チームの記録フォーム（2026-11-23〜24 の回答）から入れた記事：くさたろ（図書館・富山のルート）、ゆう（広島・熱海・大宮のラーメン）。
+   - チームの記録フォーム（2026-11-23〜24 の回答）から入れた記事：たろ（図書館・富山のルート）、ゆう（広島・熱海・大宮のラーメン）。
      文章はフォームの「ひとこと」を記事向けに整えて書き足したもの。営業時間・休み・住所は書き手が入力した値（来店前に公式サイトで確認すること）。
      写真は images/ にある（位置情報は消してあり、人の顔と車のナンバーはぼかしてある）。
    - それ以外（煮干しそば 灯 などのラーメン屋・カフェ・公式のスタンプラリー）は架空。評価・ひとことも仮。 */
@@ -10,7 +10,7 @@
      official：自治体・観光局・店の公式アカウント（ここにあるものは、すべてデモ用の架空のアカウント） */
   const writers = [
     {
-      id: "kusataro", name: "くさたろ", initial: "くさ", color: "#123D2B", art: "books",
+      id: "kusataro", name: "たろ", initial: "た", color: "#123D2B", art: "books",
       bio: "全国の図書館を、建築目当てで巡っています。光の入り方と、本棚の並べ方が好き。",
       mainTag: "図書館建築",
       membership: { name: "図書館建築ノート", price: 300 },
@@ -100,7 +100,7 @@
     { id: "c-hidamari", name: "ブックカフェ ひだまり", lat: 35.9102, lng: 139.6290, tags: ["カフェ", "図書館建築"], kind: "カフェ", indoor: true, hours: { open: "10:00", close: "19:00" }, price: 700, groupLikes: { "カフェ": 10 } },
     { id: "c-madobe", name: "喫茶 まどべ", lat: 35.9082, lng: 139.6243, tags: ["カフェ"], kind: "カフェ", indoor: true, hours: { open: "08:00", close: "18:00" }, price: 600, groupLikes: { "カフェ": 6 } },
 
-    // 全国の図書館（くさたろ）
+    // 全国の図書館（たろ）
     { id: "lib-gifu", name: "みんなの森 ぎふメディアコスモス", lat: 35.4229, lng: 136.7604, tags: ["図書館建築"], kind: "建築", indoor: true, hours: null, price: 0, groupLikes: { "図書館建築": 24 } },
     { id: "lib-ishikawa", name: "石川県立図書館", lat: 36.54867, lng: 136.68033, tags: ["図書館建築"], kind: "建築", indoor: true, hours: { open: "09:00", close: "19:00" }, hoursText: "火〜金 9:00〜19:00／土・日・祝 9:00〜18:00", closed: "月曜（祝日のときは翌平日）、年末年始、特別整理期間", price: 0, priceText: "0円", addr: "石川県金沢市小立野2丁目43-1", groupLikes: { "図書館建築": 27 } },
     { id: "lib-umimirai", name: "金沢海みらい図書館", lat: 36.59459, lng: 136.60420, tags: ["図書館建築"], kind: "建築", indoor: true, hours: { open: "10:00", close: "19:00" }, hoursText: "月・火・木・金 10:00〜19:00／土・日・祝 10:00〜17:00", closed: "水曜（祝日・振替休日は開館）、特別整理期間（6月第1月曜〜翌々日、11月最終月曜〜翌週金曜）、年末年始（12/29〜1/4）", price: 0, priceText: "0円", addr: "石川県金沢市寺中町イ1-1", groupLikes: { "図書館建築": 19 } },
@@ -113,7 +113,7 @@
     { id: "lib-musashino", name: "武蔵野プレイス", lat: 35.70084, lng: 139.54366, tags: ["図書館建築"], kind: "建築", indoor: true, hours: { open: "09:30", close: "22:00" }, hoursText: "9:30〜22:00", closed: "水曜（祝日と重なるときは開館し、翌日が休館）、年末年始、図書特別整理期間", price: 0, priceText: "0円", addr: "東京都武蔵野市境南町2丁目3-18", groupLikes: { "図書館建築": 16 } },
     { id: "lib-sentpure", name: "せんとぴゅあⅡ", lat: 43.70029, lng: 142.50873, tags: ["図書館建築"], kind: "建築", indoor: true, hours: { open: "09:00", close: "21:00" }, hoursText: "9:00〜21:00", closed: "年末年始（12/31〜1/5）", price: 0, priceText: "0円", addr: "北海道上川郡東川町北町1丁目1-2", groupLikes: { "図書館建築": 7 } },
 
-    // 富山の中心部（くさたろのルート）
+    // 富山の中心部（たろのルート）
     { id: "toyama-st", name: "富山駅", lat: 36.70137, lng: 137.21181, tags: ["旅行"], kind: "駅", indoor: true, hours: null, hoursText: "改札 5:00〜23:40／窓口 6:30〜21:00", price: 0, priceText: "0円", addr: "富山県富山市明輪町1-225" },
     { id: "kansui", name: "富岩運河環水公園", lat: 36.71133, lng: 137.21283, tags: ["自然", "旅行"], kind: "公園", indoor: false, hours: null, hoursText: "24時間", closed: "なし", price: 0, priceText: "0円", addr: "富山県富山市湊入船町1", groupLikes: { "自然": 9 } },
     { id: "yonekyu", name: "鱒の寿し 米久", lat: 36.71474, lng: 137.22049, tags: ["グルメ"], kind: "グルメ", indoor: true, hours: { open: "07:00", close: "18:00" }, hoursText: "7:00〜18:00", closed: "不定休", price: 2000, priceText: "1,000〜3,000円", addr: "富山県富山市下新本町5-14" },
@@ -145,7 +145,7 @@
      lead: 記事の書き出し。member: メンバー限定の部分 */
   const P = (src, cap) => ({ src, cap });
   const records = [
-    /* ===== くさたろ：記録フォームから ===== */
+    /* ===== たろ：記録フォームから ===== */
     {
       id: "k13", writer: "kusataro", type: "route", title: "コンパクトシティの成功例、富山。その中心部を1日歩く", mainTag: "旅行", tags: ["旅行", "図書館建築", "グルメ", "歴史"], date: "2026-05-07", start: "06:30", cover: "kansui-1",
       lead: "富山市は、路面電車を軸に、暮らしに必要なものを街の中心に集める「コンパクトシティ」のまちづくりで知られています。その中心部は、実際に歩いてみるとどうなっているのか。朝の富山駅から、隈研吾さんが設計した図書館まで、6か所を1日かけて回りました。",
@@ -316,7 +316,7 @@
       went: 35,
     },
 
-    /* ===== くさたろ：ほかの記録（仮） ===== */
+    /* ===== たろ：ほかの記録（仮） ===== */
     { id: "k1", writer: "kusataro", type: "spot", title: "波打つ木の天井の下で読む", mainTag: "図書館建築", tags: ["図書館建築"], date: "2026-10-12", spots: [{ spot: "lib-gifu", rating: 3, note: "大きな傘のような照明の下に、席がゆるく集まっている。一日いられる。" }], went: 48 },
     { id: "k4", writer: "kusataro", type: "spot", title: "美術館と図書館がらせんでつながる", mainTag: "図書館建築", tags: ["図書館建築", "美術館"], date: "2026-07-14", spots: [{ spot: "lib-ota", rating: 3, note: "スロープを上がるうちに、展示と本棚が入れ替わる。" }], member: { teaser: "建物の見どころを順番に回るルート図", body: "入口→スロープ→屋上の順で。" }, went: 22 },
     { id: "k5", writer: "kusataro", type: "spot", title: "駅前の図書館は広くて静か", mainTag: "図書館建築", tags: ["図書館建築"], date: "2026-06-01", spots: [{ spot: "lib-tsuchiura", rating: 2, note: "駅から濡れずに行ける。窓際の席が多い。" }], went: 12 },
@@ -472,11 +472,11 @@
     },
     {
       id: "o4", writer: "dmo-hokuriku", type: "route", official: true, collab: "kusataro", title: "【特集】図書館建築の書き手と巡る、富山・金沢の図書館", mainTag: "図書館建築", tags: ["図書館建築", "旅行"], date: "2026-10-30", start: "09:30", cover: "kirari-1",
-      lead: "北陸まちあるき観光局が、全国の図書館を建築目当てで巡っている書き手・くさたろさんと組んだ特集です。富山の駅前から金沢の海辺まで、建築を見に行く価値のある図書館を3つ選びました（写真：くさたろ）。",
+      lead: "北陸まちあるき観光局が、全国の図書館を建築目当てで巡っている書き手・たろさんと組んだ特集です。富山の駅前から金沢の海辺まで、建築を見に行く価値のある図書館を3つ選びました（写真：たろ）。",
       spots: [
-        { spot: "lib-toyama", stay: 90, rating: 3, tags: ["図書館建築"], head: "富山：杉の吹き抜けを、エスカレーターで上る", note: "隈研吾さん設計。ガラス美術館と一緒に。", text: ["くさたろさん：「エスカレーターで上りながら、斜めに走る木のルーバー越しの景色が変わっていくのを見てほしい」"], photos: [{ src: "kirari-1", cap: "杉のルーバーが走る大きな吹き抜け（写真：くさたろ）" }] },
-        { spot: "lib-ishikawa", stay: 120, rating: 3, tags: ["図書館建築"], head: "金沢：本のページをめくる瞬間がモチーフの、円形ドーム", note: "上の階から見下ろすと、円を描く本棚が一望できる。", text: ["くさたろさん：「金沢の旅行プランに入れる人が多いのも納得。上の階の手すりぎわから見下ろしてみてください」"], photos: [{ src: "ishikawa-1", cap: "円形ドームの吹き抜け（写真：くさたろ）" }] },
-        { spot: "lib-umimirai", stay: 60, rating: 3, tags: ["図書館建築"], head: "金沢の海辺：6,000の穴から光が差し込む、白い箱", note: "バスで20分。SFのような空間。", text: ["くさたろさん：「明るさを抑えた館内に、外壁の穴から光が差し込む。ほかでは味わえない空間です」"], photos: [{ src: "umimirai-1", cap: "小さな穴がたくさん空いた白い外壁（写真：くさたろ）" }] },
+        { spot: "lib-toyama", stay: 90, rating: 3, tags: ["図書館建築"], head: "富山：杉の吹き抜けを、エスカレーターで上る", note: "隈研吾さん設計。ガラス美術館と一緒に。", text: ["たろさん：「エスカレーターで上りながら、斜めに走る木のルーバー越しの景色が変わっていくのを見てほしい」"], photos: [{ src: "kirari-1", cap: "杉のルーバーが走る大きな吹き抜け（写真：たろ）" }] },
+        { spot: "lib-ishikawa", stay: 120, rating: 3, tags: ["図書館建築"], head: "金沢：本のページをめくる瞬間がモチーフの、円形ドーム", note: "上の階から見下ろすと、円を描く本棚が一望できる。", text: ["たろさん：「金沢の旅行プランに入れる人が多いのも納得。上の階の手すりぎわから見下ろしてみてください」"], photos: [{ src: "ishikawa-1", cap: "円形ドームの吹き抜け（写真：たろ）" }] },
+        { spot: "lib-umimirai", stay: 60, rating: 3, tags: ["図書館建築"], head: "金沢の海辺：6,000の穴から光が差し込む、白い箱", note: "バスで20分。SFのような空間。", text: ["たろさん：「明るさを抑えた館内に、外壁の穴から光が差し込む。ほかでは味わえない空間です」"], photos: [{ src: "umimirai-1", cap: "小さな穴がたくさん空いた白い外壁（写真：たろ）" }] },
       ],
       went: 342,
     },

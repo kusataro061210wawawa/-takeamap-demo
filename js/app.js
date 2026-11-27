@@ -36,6 +36,7 @@
   };
   // 文字の代わりに使う小さなアイコン（色は まわりの文字の色）
   const ic = (d) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+  const icf = (d) => `<svg class="i if" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`; // 塗りつぶしのアイコン
   const IC = {
     walk: ic('<circle cx="13" cy="4.5" r="2"/><path d="M9.5 21l2.2-6.5 3 3V21M8 12l1.5-4 3.5-1 2.5 3.5 3 1M11.7 14.5L13 7"/>'),
     train: ic('<rect x="6" y="3" width="12" height="13" rx="3"/><path d="M6 10h12M9 19l-2 2.5M15 19l2 2.5M9 13h.01M15 13h.01"/>'),
@@ -79,6 +80,10 @@
     info: ic('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/>'),
     next: ic('<path d="M9 5l7 7-7 7"/>'),
     prev: ic('<path d="M15 5l-7 7 7 7"/>'),
+    // 吹き出しの数：足あと＝その記事から行った人、上半身＝最近読んだ人、紙＝記事
+    foot: icf('<ellipse cx="8.2" cy="12.4" rx="2.7" ry="4.3" transform="rotate(-14 8.2 12.4)"/><ellipse cx="7.2" cy="19.3" rx="1.9" ry="1.7"/><ellipse cx="15.8" cy="6.6" rx="2.7" ry="4.3" transform="rotate(14 15.8 6.6)"/><ellipse cx="16.8" cy="13.5" rx="1.9" ry="1.7"/>'),
+    reader: icf('<circle cx="12" cy="7.4" r="4.1"/><path d="M3.8 21.5c0-4.9 3.7-8.4 8.2-8.4s8.2 3.5 8.2 8.4z"/>'),
+    doc: ic('<path d="M6.5 3.5h7.5l4 4v13h-11.5z"/><path d="M13.5 3.5v4.5h4.5M9.5 12.5h5M9.5 16h5"/>'),
   };
   const VIS = [["public", "公開"], ["member", "メンバー限定"], ["private", "非公開"]];
   const visLabel = (k) => (VIS.find((v) => v[0] === k) || VIS[0])[1];
@@ -89,6 +94,8 @@
   const state = {
     tag: null, mode: "fav", view: "read",
     readTag: null,           // 読む：選んでいるタグ（null = おすすめ）
+    readScope: "all",        // 読む：記事の出どころ all（すべての人）/ fav（お気に入りの書き手）
+    place: null,             // 探す：地図で押した場所。下のシートをその場所の記事だけにする
     planMode: "make",        // 予定：make（つくる）/ follow（たどる）/ redo（組み直しで、行く場所を自分で選ぶ）
     followList: true,        // たどる：保存した予定の一覧を出しているか
     sheetBy: { explore: "peek", make: "peek", follow: "half", redo: "half" }, // 下のシートの高さ（画面ごとに覚える）
@@ -134,7 +141,7 @@
     return "";
   }
   /* アカウントの絵（本番は、その人が選んだ写真やアイコンになる）。記事のカード・書き手・地図のピンで同じ絵を出す。
-     背景はその人の色。絵のない人は名前の1文字目（「く」1文字だと戻る矢印に見えるので、くさたろは2文字） */
+     背景はその人の色。絵のない人は名前の1文字目（initial） */
   const AW = "#FFFDF7", AL = "#D8EE72", AO = "#F2A27E", AY = "#F2C94C", AK = "rgba(0,0,0,.28)", AS = "#9CC9E0";
   const ART = {
     books: `<path d="M5 25.5h22" stroke="${AW}" stroke-width="2" stroke-linecap="round"/><rect x="7.5" y="9" width="5" height="15.5" rx="1" fill="${AW}"/><rect x="13.5" y="6.5" width="5" height="18" rx="1" fill="${AL}"/><rect x="20.2" y="10" width="5" height="14.5" rx="1" fill="${AO}" transform="rotate(12 22.7 17.2)"/><path d="M8.5 12.5h3M14.5 10h3" stroke="${AK}" stroke-width="1.2"/>`,
@@ -237,12 +244,27 @@
     }));
     return best;
   }
+  // 最近（3か月）その記事を読んだ人の数。試作のデータには無いので、記事ごとに決まった仮の数にする（自分で公開した記事は 0）
+  const hashOf = (t) => [...String(t)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+  function readsOf(r) {
+    if (r.reads != null) return r.reads;
+    if (r.writer === "me") return 0;
+    const h = hashOf(r.id);
+    return Math.round((r.went || 0) * (1.8 + (h % 23) / 10)) + 12 + (h % 47);
+  }
+  // 数を短く書く（1万をこえたら「1.2万」）
+  const nfmt = (n) => (n >= 10000 ? (n / 10000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, "") + "万" : n.toLocaleString());
+  // その場所の記事の数と、その場所の記事から「行った」人の累計（絞り込みに関係なく、その場所のすべて）
+  function placeStats(id) {
+    const recs = D.records.filter((r) => r.spots.some((x) => x.spot === id));
+    return { n: recs.length, went: recs.reduce((a, r) => a + (r.went || 0), 0) };
+  }
   // おまかせで選んだ場所は、選んだ理由（pickWhy）と、何の代わりか（replacedFrom）を時刻を計算し直しても残す
   const schedule = (start, stops) => (stops.length ? R.buildSchedule(D, { start: R.fmt(start), spots: stops })
     .map((s, i) => (stops[i].pickWhy ? { ...s, pickWhy: stops[i].pickWhy, replacedFrom: stops[i].replacedFrom || null } : s)) : []);
 
   /* ---------- 地図（探す・つくる・たどる で同じ地図を使う） ---------- */
-  let map, layer, bubbleLayer, pinInfo = [];
+  let map, layer, bubbleLayer, pinInfo = [], drawnZoom = null; // drawnZoom：ピンを置いたときの拡大の度合い（変わったら、まとめ方を数え直す）
   const stage = () => (state.view === "plan" ? state.planMode : "explore");
   // いま地図で直している予定：つくる＝state.draft、組み直しで自分で選ぶ＝state.redo.d（先頭の lockN か所は「いまいる場所」で動かせない）
   const ed = () => (stage() === "redo" && state.redo ? state.redo.d : state.draft);
@@ -286,8 +308,15 @@
         bubbleLayer = m.group();
         m.on("zoomstart", () => bubbleLayer.clear());
         // 探す：動かしている間は一覧を薄くし、止まって少したってから、映っている範囲の記事に入れ替える
-        m.on("movestart", () => { if (stage() === "explore") { clearTimeout(areaTimer); $("#sheet-body").classList.add("waiting"); } });
-        m.on("moveend", () => { refreshBubbles(); if (stage() === "explore") scheduleArea(); });
+        // （場所を選んでいるときは、一覧はその場所の記事のままなので薄くしない）
+        m.on("movestart", () => { if (stage() === "explore") { clearTimeout(areaTimer); if (!state.place) $("#sheet-body").classList.add("waiting"); } });
+        m.on("moveend", () => {
+          // 拡大・縮小したら、近くの場所のまとめ方が変わるので描き直す（吹き出しも置き直す）
+          if (m.getZoom() !== drawnZoom && stage() !== "follow") drawMap(false); else refreshBubbles();
+          if (stage() === "explore") scheduleArea();
+        });
+        // 探す：地図の何もない所を押すと、場所の絞り込みをやめる
+        m.on("click", () => { if (stage() === "explore" && state.place) clearPlace(); });
         return m;
       });
     }
@@ -318,11 +347,13 @@
     areaBounds = computeArea(); areaOver = sheetOver();
     renderSheet();
     const body = $("#sheet-body");
-    body.classList.remove("waiting", "fresh"); void body.offsetWidth; body.classList.add("fresh");
+    body.classList.remove("waiting", "fresh");
+    if (state.place) return; // 場所を選んでいるときは一覧が変わらないので、入れ替わりの動きは出さない（範囲だけ覚えておく）
+    void body.offsetWidth; body.classList.add("fresh");
   }
   function scheduleArea(delay = 450) {
     clearTimeout(areaTimer);
-    $("#sheet-body").classList.add("waiting");
+    if (!state.place) $("#sheet-body").classList.add("waiting");
     areaTimer = setTimeout(updateArea, delay);
   }
   const inArea = (r) => !areaBounds || r.spots.some((s) => areaBounds.contains([spotById[s.spot].lat, spotById[s.spot].lng]));
@@ -348,7 +379,7 @@
   }
   function drawMap(fit) {
     if (!map) return;
-    layer.clear(); pinInfo = [];
+    layer.clear(); pinInfo = []; drawnZoom = map.getZoom();
     const st = stage();
     let pts = [];
     if (st === "explore") pts = drawRecords(false);
@@ -375,7 +406,7 @@
         const strong = fk || r.official;
         layer.line(r.spots.map((s) => [spotById[s.spot].lat, spotById[s.spot].lng]), {
           color, weight: make ? 2.5 : strong ? 4 : 2.5, opacity: make ? 0.28 : strong ? 0.85 : 0.6, dash: r.official ? "6 6" : null,
-          onClick: make ? null : () => openArticle(r.id),
+          onClick: make ? null : () => openArticle(r.id), // 線は1つの記事なので、押すとその記事へ
         });
       }
       r.spots.forEach((s) => {
@@ -392,12 +423,21 @@
       const b = bestRecordFor(x.spot);
       seen[x.spot] = { rank: 0, r: b && b.r, s: b && b.s, sp: spotById[x.spot], saved: true };
     });
-    Object.values(seen).forEach(({ rank, r, s, sp, color, fk, saved }) => {
-      if (inDraft.has(sp.id)) return; // 予定に入れた場所は番号のピンで出す
+    // 探す：選んでいる場所は、絞り込みでその場所の記事が隠れても出しておく
+    if (!make && state.place && !seen[state.place] && spotById[state.place]) {
+      const b = bestRecordFor(state.place);
+      if (b) seen[state.place] = { rank: 0, r: b.r, s: b.s, sp: spotById[state.place], color: "#A9B2AC", fk: null };
+    }
+    // 引きの地図では、近い場所をまとめて「場所の数」の丸にする（記事がいくつあっても、1つの場所は1と数える）
+    const { singles, groups } = clusterPlaces(Object.values(seen).filter((x) => !inDraft.has(x.sp.id)), (x) => !make && x.sp.id === state.place);
+    groups.forEach(addCluster);
+    singles.forEach(({ rank, r, s, sp, color, fk, saved }) => {
       const kind = saved ? "saved" : r.official ? "official" : fk ? "fav" : "other";
-      const icon = kind === "saved" ? divPin("saved", "") : kind === "official" ? divPin("official", "公式") : kind === "fav" ? divPin("fav", artSvg(writerById[r.writer]) || esc(initial(writerById[r.writer])[0]), `background:${color}`) : divPin("other", "");
+      const sel = !make && sp.id === state.place, cls = sel ? kind + " sel" : kind;
+      const icon = kind === "saved" ? divPin("saved", "") : kind === "official" ? divPin(cls, "公式") : kind === "fav" ? divPin(cls, artSvg(writerById[r.writer]) || esc(initial(writerById[r.writer])[0]), `background:${color}`) : divPin(cls, "");
       if (!make) icon.title = sp.name;
-      addPin([sp.lat, sp.lng], icon, { half: PIN_SIZE[kind] / 2, prio: rank, sp, r, s }, () => (make ? toggleDraftSpot(sp.id) : openArticle(r.id)));
+      // 探す：押すと、下のシートをその場所の記事だけにする（1つの場所に記事がいくつもあることがあるので、記事へは直接飛ばない）
+      addPin([sp.lat, sp.lng], icon, { half: (PIN_SIZE[kind] / 2) * (sel ? 1.35 : 1), prio: sel ? 99 : rank, sp, r, s, sel }, () => (make ? toggleDraftSpot(sp.id) : selectPlace(sp.id)), sel ? 800 : 0);
       if (!make && state.mode === "group") {
         const t = state.tag || Object.keys(sp.groupLikes || {})[0];
         const n = sp.groupLikes && sp.groupLikes[t];
@@ -405,6 +445,36 @@
       }
     });
     return pts;
+  }
+
+  /* 近い場所をまとめる（大島てるの引きの地図のように、数の丸にする）。十分に拡大したら（CLUSTER_Z 以上）まとめない。
+     keep(x) が true の場所（選んでいる場所）はまとめない。返す値：singles（そのまま出す場所）、groups（まとめた場所の組） */
+  const CLUSTER_Z = 17;
+  function clusterPlaces(list, keep) {
+    const z = map.getZoom();
+    if (z >= CLUSTER_Z || list.length < 2) return { singles: list, groups: [] };
+    const R = z >= BUBBLE_ZOOM ? 26 : 40; // 最初の場所からこの距離（px）までの場所を1つの丸にまとめる
+    // 地図を動かしてもまとめ方が変わらないよう、決まった順（目立つピン → 場所の id）で数える
+    const items = list.map((x) => ({ x, pt: map.toPoint([x.sp.lat, x.sp.lng]), k: keep(x) }))
+      .sort((a, b) => b.x.rank - a.x.rank || (a.x.sp.id < b.x.sp.id ? -1 : 1));
+    const gs = [];
+    items.forEach((it) => {
+      const g = !it.k && gs.find((q) => !q.k && Math.hypot(q.pt.x - it.pt.x, q.pt.y - it.pt.y) < R);
+      if (g) g.items.push(it.x); else gs.push({ pt: it.pt, k: it.k, items: [it.x] });
+    });
+    return { singles: gs.filter((g) => g.items.length === 1).map((g) => g.items[0]), groups: gs.filter((g) => g.items.length > 1).map((g) => g.items) };
+  }
+  // まとめた場所の丸（中の数は場所の数）。押すと、その場所が全部見えるところまで拡大する
+  function addCluster(list) {
+    const lls = list.map((x) => [x.sp.lat, x.sp.lng]);
+    const ll = [lls.reduce((a, q) => a + q[0], 0) / lls.length, lls.reduce((a, q) => a + q[1], 0) / lls.length];
+    const n = list.length, d = n >= 100 ? 44 : n >= 10 ? 38 : 32;
+    pinInfo.push({ ll, half: d / 2, prio: -1, block: true }); // 吹き出しが丸に重ならないように（丸には吹き出しを出さない）
+    layer.marker(ll, {
+      html: `<div class="pin-cluster" style="width:${d}px;height:${d}px">${n}</div>`, size: [d, d], anchor: [d / 2, d / 2], z: 700,
+      title: `${n}か所（押すと拡大）`,
+      onClick: () => map.fit(lls, { pad: 0.25, maxZoom: CLUSTER_Z + 1, top: topInset() + 40, left: 40, right: 40, bottom: sheetOver() + 40 }),
+    });
   }
 
   // 番号のピン。下に着く時刻を出す（warn = 着く時刻に開いていない）
@@ -634,22 +704,28 @@
     return ph === "go" && pl.from ? [spotLL(pl.from), spotLL(pl.stops[cur].spot)] : all;
   }
 
-  /* 吹き出し：ある程度拡大して、まわりに余白があるピンだけに、場所名・記事名・評価を出す。押すと記事へ */
-  const BW = 196, BH = 62, BGAP = 9, BUBBLE_ZOOM = 15;
+  /* 吹き出し：ある程度拡大して、まわりに余白があるピンだけに、場所の概要（場所名・記事名・評価・行った人・読んだ人）を出す。
+     探すでは押すとその場所の記事だけにする。つくる・たどるでは記事へ */
+  const BW = 196, BH = 62, BGAP = 9, BUBBLE_ZOOM = 15, BOUT = 21; // BOUT：吹き出しの外に出す数の帯の高さ（すきまを含む）
   function refreshBubbles() {
     if (!map || !bubbleLayer) return;
     bubbleLayer.clear();
     if (!$("#view-map").classList.contains("active")) return;
-    placeBubbles(map, bubbleLayer, pinInfo.map((p) => ({ ...p, b: mainBubble(p) })), topInset() + 4, map.getSize().y - sheetOver() - 4);
+    placeBubbles(map, bubbleLayer, pinInfo.map((p) => ({ ...p, b: p.block ? null : mainBubble(p) })), topInset() + 4, map.getSize().y - sheetOver() - 4);
   }
   // 探す・つくる・たどる の吹き出しの中身
   function mainBubble(p) {
     const w = p.r && writerById[p.r.writer], ph = p.r && stopPhotos(p.r, p.sp.id)[0];
+    const st = stage(), ex = st === "explore";
+    // 吹き出しの外：その場所のほかの記事の数と、その場所に行った人の累計（記事が2つ以上ある場所だけ。たどるでは出さない）
+    const ps = p.r && st !== "follow" ? placeStats(p.sp.id) : null;
     return {
-      cls: `${p.num ? (p.fl ? "is-fl" : "is-num") : ""} ${p.r ? "" : "no-rec"}`, num: p.num, name: p.sp.name,
+      cls: `${p.num ? (p.fl ? "is-fl" : "is-num") : ""} ${p.r ? "" : "no-rec"} ${p.sel ? "is-sel" : ""}`, num: p.num, name: p.sp.name,
       title: p.r ? "「" + p.r.title + "」" : p.sp.kind + "（記事はまだありません）",
-      rating: p.r && p.s.rating, who: w && w.name, go: p.r ? "記事 ›" : "", photo: ph && ph.src,
-      onClick: p.r ? () => openArticle(p.r.id) : null,
+      rating: p.r && p.s.rating, who: w && w.name, go: p.r && !ex ? "記事 ›" : "", photo: ph && ph.src,
+      stats: p.r ? { went: p.r.went || 0, reads: readsOf(p.r) } : null, // 右上：この記事から行った人・最近読んだ人
+      out: ps && ps.n > 1 ? { more: ps.n - 1, went: ps.went } : null,
+      onClick: !p.r ? null : ex ? () => selectPlace(p.sp.id) : () => openArticle(p.r.id),
     };
   }
   /* 吹き出しを置く（どの地図でも使う）。pins: { ll, half, below?, prio, b: 中身 }
@@ -663,7 +739,7 @@
       return { ...p, pt, box: { x: pt.x - h, y: pt.y - h, w: h * 2, h: h * 2 + (p.below || 0) } };
     }).filter((p) => p.pt.x > -40 && p.pt.x < size.x + 40 && p.pt.y > top - 40 && p.pt.y < bottom + 40);
     const placed = [];
-    pins.filter((p) => p.pt.x >= 0 && p.pt.x <= size.x && p.pt.y >= top && p.pt.y <= bottom)
+    pins.filter((p) => p.b && p.pt.x >= 0 && p.pt.x <= size.x && p.pt.y >= top && p.pt.y <= bottom) // b がない点（まとめた丸）は、よけるだけ
       .sort((a, b) => b.prio - a.prio)
       .forEach((p) => {
         const o = p.half + BGAP, ob = o + (p.below || 0);
@@ -671,9 +747,10 @@
           top: { x: p.pt.x - BW / 2, y: p.pt.y - o - BH }, bottom: { x: p.pt.x - BW / 2, y: p.pt.y + ob },
           right: { x: p.pt.x + o, y: p.pt.y - BH / 2 }, left: { x: p.pt.x - o - BW, y: p.pt.y - BH / 2 },
         };
+        const out = p.b.out ? BOUT : 0; // 外の数の帯：上に出す吹き出しは上、ほかは下につく
         for (const pos of ["top", "bottom", "right", "left"]) {
-          const r = { ...cand[pos], w: BW, h: BH };
-          if (r.x < 6 || r.x + BW > size.x - 6 || r.y < top || r.y + BH > bottom) continue;
+          const r = { x: cand[pos].x, y: cand[pos].y - (pos === "top" ? out : 0), w: BW, h: BH + out };
+          if (r.x < 6 || r.x + BW > size.x - 6 || r.y < top || r.y + r.h > bottom) continue;
           if (placed.some((q) => hit(q, r, 6))) continue;
           if (pins.some((q) => q !== p && hit(q.box, r))) continue;
           placed.push(r); addBubble(lyr, p, pos, o, ob); break;
@@ -683,13 +760,16 @@
   function addBubble(lyr, p, pos, o, ob) {
     const anchor = { top: [BW / 2, o + BH], bottom: [BW / 2, -ob], right: [-o, BH / 2], left: [BW + o, BH / 2] }[pos];
     const b = p.b, src = b.photoUrl || (b.photo && img(b.photo, true)); // photoUrl：自分で入れた写真（そのまま使う）
+    // 右上の数（期間は吹き出しには書かない。マウスを重ねたときだけ出す）
+    const bst = b.stats ? `<span class="bst" title="この記事から行った人 ${b.stats.went.toLocaleString()}人・最近3か月で読んだ人 ${b.stats.reads.toLocaleString()}人"><span>${IC.foot}${nfmt(b.stats.went)}</span><span>${IC.reader}${nfmt(b.stats.reads)}</span></span>` : "";
+    const bout = b.out ? `<span class="bout ${pos === "top" ? "up" : "down"}" title="この場所のほかの記事 ${b.out.more}件・この場所の記事から行った人 累計${b.out.went.toLocaleString()}人"><span>${IC.doc}ほか${b.out.more}</span><span>${IC.foot}累計${nfmt(b.out.went)}</span></span>` : "";
     const html = `<div class="bubble b-${pos} ${b.cls || ""} ${src ? "has-ph" : ""}">
       ${src ? `<img class="bph" src="${src}" alt="" loading="lazy">` : ""}
       <span class="btx">
-        <span class="bn">${b.num ? `<i>${b.num}</i>` : ""}${esc(b.name)}</span>
+        <span class="brow"><span class="bn">${b.num ? `<i>${b.num}</i>` : ""}${esc(b.name)}</span>${bst}</span>
         <span class="bt">${esc(b.title)}</span>
         ${b.rating || b.who ? `<span class="bm">${b.rating ? ratingTag(b.rating) : ""}<span class="bw">${esc(b.who || "")}</span>${b.go ? `<span class="bgo">${esc(b.go)}</span>` : ""}</span>` : ""}
-      </span>
+      </span>${bout}
     </div>`;
     lyr.marker(p.ll, { cls: "bubble-icon", html, size: [BW, BH], anchor, z: 3000 + (b.z || 0), onClick: b.onClick || null });
   }
@@ -723,6 +803,7 @@
     if (st !== "explore") body.classList.remove("waiting", "fresh");
     // たどっている途中は、シートのふちを色つきの光で光らせて「いま進んでいる予定」だとわかるようにする
     $("#sheet").classList.toggle("live", st === "follow" && !!state.plan && !state.followList && state.plan.phase !== "end");
+    $("#sheet-head").classList.toggle("pl-head", st === "explore" && !!spotById[state.place]);
     if (st === "explore") renderExploreSheet();
     else if (st === "make") renderMakeSheet();
     else if (st === "redo") renderRedoSheet();
@@ -746,6 +827,7 @@
   }
 
   function renderExploreSheet() {
+    if (spotById[state.place]) { renderPlaceSheet(); return; }
     const all = visibleRecords();
     const recs = all.filter(inArea);
     const off = recs.filter((r) => r.official);
@@ -760,6 +842,42 @@
     if (!all.length) html = `<div class="empty">この条件の記事はまだありません。<br>「同じ趣味の人たち」に切り替えてみてください。</div>`;
     else if (!recs.length) html = `<div class="empty">地図に映っている範囲には、記事がありません。<br>地図を縮小するか、動かしてみてください。<br><br><button class="btn ghost small" data-act="fit-all">記事のある場所を表示する（${all.length}件）</button></div>`;
     $("#sheet-body").innerHTML = foundCard() + html;
+  }
+
+  /* 探す：地図で選んだ場所の記事だけを出す。いまの絞り込み（タグ・お気に入りなど）に合う記事を先に、合わない記事もその下に出す */
+  function renderPlaceSheet() {
+    const sp = spotById[state.place], all = recsAt(sp.id), vis = new Set(visibleRecords().map((r) => r.id));
+    const score = (r) => { const k = favKind(r.writer, r); return k === "fav" ? 3 : k ? 2 : r.official ? 1 : 0; };
+    const order = (a, b) => score(b) - score(a) || (b.went || 0) - (a.went || 0);
+    const hit = all.filter((r) => vis.has(r.id)).sort(order), rest = all.filter((r) => !vis.has(r.id)).sort(order);
+    const ps = placeStats(sp.id);
+    const label = state.mode === "fav" ? "お気に入り" : state.mode === "group" ? "同じ趣味の人たち" : "すべての人";
+    $("#sheet-head").innerHTML = `<button class="pl-back" data-act="place-clear" aria-label="この範囲の記事に戻る">${IC.back}</button><b>${esc(sp.name)}</b><small>記事${all.length}件・${IC.foot}累計${nfmt(ps.went)}人</small>`;
+    let html = `<div class="pl-sub">${esc(sp.kind)}${sp.addr ? "・" + esc(sp.addr) : ""}<span>この場所の記事だけを出しています</span></div>`;
+    html += hit.map(recordCard).join("");
+    if (rest.length) html += `<div class="section-label">いまの絞り込み（${esc(state.tag || "すべて")}・${label}）には入らない記事</div>` + rest.map(recordCard).join("");
+    if (!all.length) html += `<div class="empty">この場所の記事はまだありません。</div>`;
+    $("#sheet-body").innerHTML = html;
+  }
+  // 地図で場所を押したとき（ピン・吹き出し）。シートが下がっていたら半分まで上げ、ピンが隠れていたら見える所まで地図を動かす
+  function selectPlace(id) {
+    const sp = spotById[id];
+    if (!sp) return;
+    state.place = id;
+    if ($("#sheet").classList.contains("peek")) setSheet("half");
+    renderSheet(); $("#sheet-body").scrollTop = 0;
+    drawMap(false);
+    if (!map) return;
+    const size = map.getSize(), pt = map.toPoint([sp.lat, sp.lng]), y0 = topInset(), y1 = size.y - sheetOver();
+    if (pt.y < y0 + 24 || pt.y > y1 - 24 || pt.x < 24 || pt.x > size.x - 24) map.centerOn([sp.lat, sp.lng], map.getZoom(), (y0 + y1) / 2 - size.y / 2, true);
+  }
+  // 場所の絞り込みをやめて、地図に映っている範囲の記事に戻す（見出しの ‹、地図の何もない所を押す）
+  function clearPlace() {
+    if (!state.place) return;
+    state.place = null;
+    renderSheet(); drawMap(false);
+    const body = $("#sheet-body");
+    body.classList.remove("fresh"); void body.offsetWidth; body.classList.add("fresh");
   }
 
   /* つくる：予定表。縮めているときは順番だけ、引き上げると時間の調整と保存 */
@@ -1816,8 +1934,9 @@
   // 公式（自治体・観光局・店）の記事は先頭にしないで、4番目と、そのあと7つおきに1つずつ混ぜる（残りは最後に）
   function readFeed() {
     const score = (r) => { const k = favKind(r.writer, r); return k === "fav" ? 3 : k ? 2 : 0; };
+    // お気に入り：お気に入りの書き手（タグだけお気に入りの人は、そのタグの記事）の記事だけ。公式も、お気に入りにしたものだけ
     const list = D.records
-      .filter((r) => readHit(r, state.readTag))
+      .filter((r) => readHit(r, state.readTag) && (state.readScope !== "fav" || !!favKind(r.writer, r)))
       .sort((a, b) => !!coverSrc(b) - !!coverSrc(a) || score(b) - score(a) || (b.type === "route") - (a.type === "route") || b.went - a.went);
     const off = list.filter((r) => r.official), out = [];
     let k = 0;
@@ -1893,6 +2012,10 @@
     const chipsEl = $(".read-chips", el), keepX = chipsEl ? chipsEl.scrollLeft : 0;
     const [hero, ...rest] = readFeed();
     const chips = [[null, "おすすめ"], ...D.TAGS.map((t) => [t, "#" + t])];
+    const scopes = [["all", "すべての人"], ["fav", "お気に入り"]];
+    const none = state.readScope === "fav"
+      ? `<div class="empty">${state.readTag ? "お気に入りの書き手の、このタグの記事はまだありません。" : "お気に入りの書き手の記事はまだありません。"}<br>書き手を「お気に入り」にすると、ここに出ます。</div>`
+      : '<div class="empty">このタグの記事はまだありません。</div>';
     el.innerHTML = `<header class="read-head">
         <div class="logo">${ICON.pin}Take A Map</div>
         <span class="demo-badge">試作・データは仮</span>
@@ -1900,9 +2023,9 @@
       </header>
       <button class="search read-search" id="read-search">${ICON.search}<span>街・作品名・書き手でさがす</span></button>
       <div class="read-chips ${state.readTag ? "has-on" : ""}">${chips.map(([t, l]) => `<button class="tchip ${t ? "" : "rec"} ${state.readTag === t ? "on" : ""}" data-rtag="${t || ""}" ${t ? `style="background:${tagColor(t)}"` : ""}>${esc(l)}</button>`).join("")}</div>
-      <button class="today" id="today-btn"><span class="orb">${ICON.spark}</span><span class="today-text"><b>今日どうする？</b><small>お気に入りのマップから、今から行ける所で予定を作る</small></span><span class="chev">${ICON.chev}</span></button>
+      <div class="read-tabs" role="tablist" aria-label="記事の出どころ">${scopes.map(([k, l]) => `<button role="tab" aria-selected="${state.readScope === k}" class="${state.readScope === k ? "on" : ""}" data-rscope="${k}"><span>${l}</span></button>`).join("")}</div>
       <div class="feed">
-        ${hero ? feedCard(hero, true) : '<div class="empty">このタグの記事はまだありません。</div>'}
+        ${hero ? feedCard(hero, true) : none}
         ${rest.length ? `<div class="grid">${rest.map((r) => feedCard(r, false)).join("")}</div>` : ""}
       </div>`;
     $(".read-chips", el).scrollLeft = keepX;
@@ -3440,7 +3563,7 @@
   }
   // 見つけた場所を地図に出す（探す・つくる・組み直す）。下のシートの上にカードを出し、地図をそこへ動かす
   function showFound(sp) {
-    state.found = sp.id;
+    state.found = sp.id; state.place = null;
     if (stage() === "follow") return;
     setSheet("half"); renderSheet(); drawMap(false);
     if (!map) return;
@@ -3452,7 +3575,10 @@
     if (!sp || st === "follow") return;
     if ((st === "make" || st === "redo") && ed().stops.some((x) => x.spot === sp.id)) return; // 予定に入れたら番号のピンで出す
     const b = bestRecordFor(sp.id);
-    addPin([sp.lat, sp.lng], { ...divPin("found", IC.flag), title: sp.name }, { half: 16, prio: 60, sp, r: b && b.r, s: b && b.s }, () => { setSheet("half"); $("#sheet-body").scrollTop = 0; }, 2500);
+    addPin([sp.lat, sp.lng], { ...divPin("found", IC.flag), title: sp.name }, { half: 16, prio: 60, sp, r: b && b.r, s: b && b.s }, () => {
+      if (state.place) { state.place = null; renderSheet(); drawMap(false); } // 見つけた場所のカードに戻す
+      setSheet("half"); $("#sheet-body").scrollTop = 0;
+    }, 2500);
   }
   function foundCard() {
     const sp = state.found && spotById[state.found];
@@ -3501,6 +3627,7 @@
   function closePlanMenu() { planTab().classList.remove("open"); }
   function switchView(v) {
     state.view = v; closePanels(); closePlanMenu();
+    if (v !== "map") state.place = null; // 探すを離れたら、場所の絞り込みはやめる
     const sec = v === "plan" ? "map" : v; // 予定（つくる／たどる）は探すと同じ地図の画面を使う
     $$(".view").forEach((s) => s.classList.toggle("active", s.id === "view-" + sec));
     $$("#tabbar [data-view]").forEach((b) => b.classList.toggle("on", b.dataset.view === v));
@@ -3545,7 +3672,7 @@
       if (!map && (state.view === "map" || state.view === "plan")) enterStage();
       if (state.view === "me" && !stack.length) renderMe();
     });
-    const refilter = () => { renderChips(); drawMap(stage() === "explore"); if (stage() === "explore") scheduleArea(); else renderSheet(); };
+    const refilter = () => { renderChips(); drawMap(stage() === "explore" && !state.place); if (stage() === "explore") scheduleArea(); else renderSheet(); };
     $("#chips").addEventListener("click", (e) => { const b = e.target.closest("[data-tag]"); if (!b) return; state.tag = b.dataset.tag || null; refilter(); });
     $("#modes").addEventListener("click", (e) => { const b = e.target.closest("[data-mode]"); if (!b) return; state.mode = b.dataset.mode; refilter(); });
     $("#stage-bar").addEventListener("click", (e) => {
@@ -3563,11 +3690,13 @@
       if (justSorted()) return; // 並べ替えた直後のクリックは無視
       const t = e.target.closest("[data-mk],[data-fl],[data-act],[data-rec]");
       if (!t || t.disabled) return;
+      const act = t.dataset.act || ""; // 記事のカード（data-rec）には act がない
       if (t.dataset.mk) onMake(t);
       else if (t.dataset.fl) onFollow(t);
-      else if (t.dataset.act === "fit-all") drawMap(true);
-      else if (t.dataset.act.startsWith("found")) onFound(t.dataset.act);
-      else if (t.dataset.act) onFollowAct(t.dataset.act);
+      else if (act === "fit-all") drawMap(true);
+      else if (act === "place-clear") clearPlace();
+      else if (act.startsWith("found")) onFound(act);
+      else if (act) onFollowAct(act);
       else if (t.dataset.rec) openArticle(t.dataset.rec);
     };
     sb.addEventListener("click", onSheetClick);
@@ -3586,7 +3715,13 @@
       if (card) { openArticle(card.dataset.rec); return; }
       const t = e.target.closest("button"); if (!t) return;
       if (t.dataset.rtag !== undefined) { state.readTag = t.dataset.rtag || null; renderRead(); }
-      else if (t.id === "today-btn") openPlan("make");
+      else if (t.dataset.rscope) {
+        // 上に固定されているときに切り替えたら、切り替えの帯が上にある所から見せる（X のおすすめ／フォロー中と同じ）
+        const tabsTop = () => { const c = $(".read-chips", rv); return c.offsetTop + c.offsetHeight; };
+        const stuck = rv.scrollTop > tabsTop();
+        state.readScope = t.dataset.rscope; renderRead();
+        if (stuck) rv.scrollTop = tabsTop();
+      }
       else if (t.id === "read-search") switchView("map");
       else if (t.id === "bell") toast("お知らせはまだありません（試作）");
     });

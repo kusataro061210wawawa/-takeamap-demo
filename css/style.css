@@ -214,13 +214,6 @@ input, textarea, select { font: inherit; color: inherit; }
 .tchip.rec { background: var(--green); color: var(--lime); }
 .tchip.on { outline: 2.5px solid var(--green); outline-offset: 2px; }
 .read-chips.has-on .tchip:not(.on) { opacity: .55; }
-.today { margin: 8px 16px 4px; width: calc(100% - 32px); display: flex; align-items: center; gap: 12px; background: var(--green); color: var(--paper); border-radius: 18px; padding: 14px; text-align: left; }
-.today .orb { flex: none; width: 46px; height: 46px; border-radius: 50%; background: var(--lime); display: flex; align-items: center; justify-content: center; }
-.today .orb svg { width: 22px; height: 22px; fill: none; stroke: var(--green); stroke-width: 2.2; stroke-linecap: round; }
-.today-text b { display: block; font-size: 16.5px; letter-spacing: .5px; }
-.today-text small { display: block; font-size: 12px; opacity: .85; line-height: 1.45; }
-.today .chev { margin-left: auto; flex: none; }
-.today .chev svg { width: 20px; height: 20px; fill: none; stroke: var(--lime); stroke-width: 2.4; }
 .feed { padding: 12px 16px 24px; }
 .cover { position: relative; display: block; width: 100%; overflow: hidden; color: #fff; text-align: left; background-size: cover; background-position: center; }
 .cover::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(115deg, rgba(255,255,255,.05) 0 2px, transparent 2px 18px); }
@@ -1323,3 +1316,48 @@ html.sheet-dragging, html.sheet-dragging * { -webkit-user-select: none !importan
 @media (prefers-reduced-motion: reduce) {
   .sheet.live, .sheet.live::before, .live-tag i { animation: none; }
 }
+
+/* ===== 2026-11-27（3回目）：場所で絞り込む・吹き出しの数・場所の数の丸・読むの切り替え ===== */
+.i.if { fill: currentColor; stroke: none; }
+
+/* 吹き出し：幅を地図の計算（BW）と合わせる。右上に「この記事から行った人」「最近読んだ人」 */
+.bubble { width: 196px; }
+.bubble .brow { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.bubble .brow .bn { flex: 1; min-width: 0; }
+.bubble .bst { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; color: var(--gray); font-variant-numeric: tabular-nums; }
+.bubble .bst > span { display: inline-flex; align-items: center; gap: 1px; }
+.bubble .bst .i { width: 11px; height: 11px; vertical-align: 0; }
+.bubble .bst > span:first-child .i { color: var(--green); }
+/* 吹き出しの外：その場所のほかの記事の数・行った人の累計（ピンと反対の側につく） */
+.bubble .bout { position: absolute; right: 10px; display: inline-flex; align-items: center; gap: 8px; height: 18px; padding: 0 8px; border-radius: 9px; background: var(--green); color: var(--paper); font-size: 10.5px; font-weight: 700; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.25); font-variant-numeric: tabular-nums; }
+.bubble .bout.up { bottom: calc(100% + 3px); }
+.bubble .bout.down { top: calc(100% + 3px); }
+.bubble .bout > span { display: inline-flex; align-items: center; gap: 2px; }
+.bubble .bout .i { width: 11px; height: 11px; color: var(--lime); vertical-align: 0; }
+
+/* 引きの地図：近い場所をまとめた丸（中の数は記事ではなく場所の数） */
+.pin-cluster { box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--green); color: var(--lime); border: 3px solid var(--paper); box-shadow: 0 0 0 4px rgba(18,61,43,.22), 0 2px 6px rgba(0,0,0,.35); font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; animation: pinpop .25s ease; }
+.gm-mk:hover .pin-cluster { background: #1B5A3F; }
+
+/* 探す：場所を選んでいるときの見出しと一覧 */
+.sheet-head.pl-head { flex-wrap: nowrap; align-items: center; }
+.sheet-head.pl-head b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet-head.pl-head small { flex: none; display: inline-flex; align-items: center; gap: 2px; }
+.sheet-head.pl-head small .i { width: 12px; height: 12px; color: var(--green); vertical-align: 0; }
+.pl-back { flex: none; width: 30px; height: 30px; margin-left: -4px; border-radius: 50%; border: 1px solid var(--line); background: #fff; display: flex; align-items: center; justify-content: center; color: var(--green); }
+.pl-back .i { width: 18px; height: 18px; stroke-width: 2.4; }
+.pl-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0 4px 8px; font-size: 12.5px; color: var(--gray); }
+.pl-sub span { font-size: 11px; font-weight: 700; color: var(--green); background: #EEF3D6; border-radius: 10px; padding: 1px 8px; }
+
+/* 読む：上をせまくし、「すべての人／お気に入り」の切り替えを、下にスクロールしても上に固定する */
+.read-head { padding: max(8px, env(safe-area-inset-top)) 16px 2px; }
+.logo { font-size: 19px; }
+.read-search { margin-top: 2px; padding: 9px 16px; }
+.read-chips { padding: 8px 16px 6px; }
+.read-tabs { position: sticky; top: 0; z-index: 30; display: flex; background: rgba(247,244,234,.93); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.read-tabs button { flex: 1; height: 44px; display: flex; justify-content: center; font-size: 14.5px; font-weight: 700; color: var(--gray); }
+.read-tabs button span { position: relative; display: flex; align-items: center; height: 100%; }
+.read-tabs button.on { color: var(--green); font-weight: 800; }
+.read-tabs button.on span::after { content: ""; position: absolute; left: -6px; right: -6px; bottom: 0; height: 4px; border-radius: 2px; background: var(--green); }
+.read-tabs button:active { background: rgba(18,61,43,.06); }
+.read-tabs + .feed { padding-top: 12px; }
