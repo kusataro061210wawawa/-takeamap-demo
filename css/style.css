@@ -1435,3 +1435,21 @@ html.sheet-dragging, html.sheet-dragging * { -webkit-user-select: none !importan
 .like-filter.on .i { animation: likepop .3s ease; }
 .like-filter:active { transform: scale(.94); }
 @media (prefers-reduced-motion: reduce) { .like-filter.on .i { animation: none; } }
+
+/* ===== 2026-11-27（8回目）：記事から予定をつくるときは、まず回る順番だけ ===== */
+.sm-list { list-style: none; margin: 2px 0 0; padding: 0; }
+.sm-list li { position: relative; display: flex; align-items: center; gap: 12px; padding: 8px 4px; }
+.sm-list li + li::before { content: ""; position: absolute; left: 15px; top: -8px; height: 16px; border-left: 2px dotted #E2A88F; }
+.sm-list .mk-num { flex: none; margin-top: 0; }
+.sm-list li span { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.sm-list li b { font-size: 15px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-list li small { font-size: 11.5px; color: var(--gray); }
+.sm-note { margin-top: 8px; }
+.sm-detail { margin-top: 12px; }
+/* 時間をまだ決めていない予定：たどるの一覧の印と、時間を決める画面の案内・決定 */
+.badge.untimed { display: inline-flex; align-items: center; gap: 3px; background: #FFF1E0; color: #B5651D; }
+.badge.untimed .i { width: 11px; height: 11px; }
+.plan-card.untimed .meta span:nth-child(2) { color: #B5651D; }
+.mk-decide-hint { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; padding: 9px 12px; border-radius: 12px; background: #EAF1FD; color: #2B5DB8; font-size: 12.5px; font-weight: 700; line-height: 1.45; }
+.mk-decide-hint .i { width: 16px; height: 16px; flex: none; }
+.mk-decide { margin-top: 14px; }

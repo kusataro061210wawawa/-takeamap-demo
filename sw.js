@@ -4,7 +4,7 @@
  *   オフラインのときは、地図の所にだけ「地図を表示できません」と出る（js/gmap.js）
  * ファイルを変えたら VERSION の数字を上げる（古い保存が入れ替わる）
  */
-const VERSION = "v16";
+const VERSION = "v17";
 const APP_CACHE = "tam-app-" + VERSION;
 const IMG_CACHE = "tam-img-v1"; // 記事の写真（名前を変えない限り中身は変わらないので、保存を先に使う）
 const OLD_CACHES = ["tam-tiles-v1"]; // 前の版で保存していた国土地理院の地図タイル（もう使わないので消す）
@@ -69,7 +69,8 @@ const IMG_FILES = [
 self.addEventListener("install", (e) => {
   e.waitUntil(
     Promise.all([
-      caches.open(APP_CACHE).then((c) => c.addAll(APP_FILES)),
+      // ブラウザの保存（GitHub Pages は10分）を使わずに、サーバーから新しく取る
+      caches.open(APP_CACHE).then((c) => c.addAll(APP_FILES.map((f) => new Request(f, { cache: "reload" })))),
       // 写真は1枚失敗しても入れられるように1枚ずつ
       caches.open(IMG_CACHE).then((c) => Promise.all(IMG_FILES.map((f) => c.match(f).then((hit) => hit || c.add(f).catch(() => {}))))),
     ]).then(() => self.skipWaiting())
@@ -111,10 +112,11 @@ self.addEventListener("fetch", (e) => {
   }
 
   // アプリ本体：ネットにつながれば最新を使い、つながらなければ保存したものを使う
+  // 最新かどうかは、いつもサーバーに確かめる（cache: "no-cache"。ブラウザに10分残る古い版を使わない）
   // （ほかのサイト、たとえば場所を名前で探すときの OpenStreetMap は、ここに来ない＝横取りも保存もしない）
   if (url.origin === self.location.origin) {
     e.respondWith(
-      fetch(req)
+      fetch(req.mode === "navigate" ? req.url : req, { cache: "no-cache" })
         .then((res) => {
           if (res.ok) { const copy = res.clone(); caches.open(APP_CACHE).then((c) => c.put(req, copy)); }
           return res;

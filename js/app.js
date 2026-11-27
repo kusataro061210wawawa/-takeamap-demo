@@ -90,7 +90,9 @@
   const visLabel = (k) => (VIS.find((v) => v[0] === k) || VIS[0])[1];
 
   // つくっている途中の予定。stops は { spot, stay }。start は分（600 = 10:00）
-  const newDraft = (o = {}) => ({ id: null, name: "", start: 600, stops: [], from: null, dirty: false, ...o });
+  /* simple：記事から予定をつくったときの、回る順番だけの画面（時間は出さない。「詳しく調整」でいつもの画面へ）
+     decide：たどるで、時間をまだ決めていない予定を選んだとき。いつもの画面のいちばん下に「決定」（押すと、そのままたどり始める） */
+  const newDraft = (o = {}) => ({ id: null, name: "", start: 600, stops: [], from: null, dirty: false, simple: false, decide: false, ...o });
 
   const state = {
     tag: null, mode: "fav", likedOnly: false, view: "read",
@@ -577,7 +579,7 @@
     if (ll.length > 1) layer.line(ll, { color: "#E86B45", weight: 4.5, opacity: 0.9 });
     stops.forEach((x, i) => {
       const b = bestRecordFor(x.spot), sp = spotById[x.spot], a = sch[i];
-      const info = { half: 14, below: TIME_H, prio: 10, sp, r: b && b.r, s: b && b.s, num: numOf(d, i) };
+      const info = { half: 14, below: d.simple ? 0 : TIME_H, prio: 10, sp, r: b && b.r, s: b && b.s, num: numOf(d, i) };
       if (i < lk) { // いまいる場所・出てきた場所（動かせない）
         const skipHere = rd && rd.kind === "at" && rd.closed, left = rd && rd.kind !== "at";
         const cls = left ? "fl done" : skipHere ? "fl dropped now" : "fl now";
@@ -585,7 +587,7 @@
         return;
       }
       const warn = !!stopWarn(sp, a);
-      const m = addPin(ll[i], numPin(numOf(d, i), R.fmt(a.arrive), "", warn), info, () => {
+      const m = addPin(ll[i], numPin(numOf(d, i), d.simple ? "" : R.fmt(a.arrive), "", !d.simple && warn), info, () => {
         if (longFired) { longFired = false; return; }
         toggleDraftSpot(x.spot);
       }, 1000);
@@ -684,7 +686,7 @@
         <div class="picker-list">${d.stops.map((s, k) => {
           const name = esc(spotById[s.spot].name), warn = k >= lk && stopWarn(spotById[s.spot], sch[k]);
           if (k < lk) return `<div class="picker-row locked"><span class="mk-num">${numOf(d, k)}</span><span class="pr-name">${name}</span><span class="pr-now">${lockLabel()}</span></div>`;
-          return `<button class="picker-row ${k === fi ? "on" : ""}" data-to="${k}"><span class="mk-num">${numOf(d, k)}</span><span class="pr-name">${k === fi ? `<b>${name}</b>` : name}</span><span class="pr-time ${warn ? "warn" : ""}">${R.fmt(sch[k].arrive)}着</span><span class="grip" aria-hidden="true">${ICON.grip}</span></button>`;
+          return `<button class="picker-row ${k === fi ? "on" : ""}" data-to="${k}"><span class="mk-num">${numOf(d, k)}</span><span class="pr-name">${k === fi ? `<b>${name}</b>` : name}</span>${d.simple ? "" : `<span class="pr-time ${warn ? "warn" : ""}">${R.fmt(sch[k].arrive)}着</span>`}<span class="grip" aria-hidden="true">${ICON.grip}</span></button>`;
         }).join("")}</div>
         <div class="picker-foot"><button class="mini-btn danger" data-pk="del">${esc(sp.name)}を外す</button><button class="btn primary small" data-pk="close">閉じる</button></div>
       </div>`;
@@ -1046,10 +1048,23 @@
       toast(`${spotById[it.spot].name}を${numOf(d, to)}番にしました`);
     } });
   }
+  // 記事から予定をつくったとき：どの順でどこを回るかだけ（時間は出さない）。すぐに保存でき、「詳しく調整」でいつもの画面へ
+  function renderSimpleMake(d) {
+    $("#sheet-head").innerHTML = `<b>予定をつくる</b><small>${d.stops.length}か所・回る順番</small>`;
+    const list = d.stops.map((s, i) => { const sp = spotById[s.spot]; return `<li><i class="mk-num">${i + 1}</i><span><b>${esc(sp.name)}</b>${sp.kind ? `<small>${esc(sp.kind)}</small>` : ""}</span></li>`; }).join("");
+    const saved = d.id && !d.dirty;
+    $("#sheet-body").innerHTML = foundCard() + `<ol class="sm-list">${list}</ol>
+      ${d.from ? `<div class="mk-tip">元の記事：${esc(recById[d.from].title)}</div>` : ""}
+      <div class="mk-save"><input class="field" id="mk-name" placeholder="予定の名前" value="${esc(d.name)}" aria-label="予定の名前"><button class="btn primary" data-mk="save">${IC.save}${d.id ? "上書き" : "保存"}</button></div>
+      ${saved ? `<div class="saved-note">${IC.check}<span>保存しました。時間は、たどる前に決めます</span><button class="link-btn" data-mk="follow">${IC.clock}時間を決めてたどる</button></div>` : `<div class="small sm-note">順番だけで保存できます。時間は、たどるときに決められます</div>`}
+      <button class="btn ghost block sm-detail" data-mk="detail">${IC.clock}詳しく調整</button>`;
+  }
   function renderMakeSheet() {
     const d = state.draft, sch = schedule(d.start, d.stops), n = sch.length;
+    if (d.simple && n) { renderSimpleMake(d); return; }
+    const decide = d.decide && !!d.id; // たどるで、時間をまだ決めていない予定を選んで開いたとき
     const span = n ? `${R.fmt(sch[0].arrive)}–${R.fmt(sch[n - 1].depart)}` : "";
-    $("#sheet-head").innerHTML = `<b>予定をつくる</b><small>${n ? `${n}か所・${span}` : "地図の場所を押して始める"}</small>`;
+    $("#sheet-head").innerHTML = `<b>${decide ? "時間を決める" : "予定をつくる"}</b><small>${n ? `${n}か所・${span}` : "地図の場所を押して始める"}</small>`;
     if (!n) {
       $("#sheet-body").innerHTML = foundCard() + `<div class="mk-steps">
           <span>${IC.pin}<b>場所を押す</b></span><span class="arr">›</span><span><i class="mk-num">1</i><b>順に入る</b></span><span class="arr">›</span><span>${IC.save}<b>名前を付けて保存</b></span>
@@ -1059,7 +1074,7 @@
     }
     const chain = sch.map((s, i) => `<span class="chain-stop"><i>${i + 1}</i>${R.fmt(s.arrive)} ${esc(spotById[s.spot].name)}</span>`).join('<span class="chain-arrow">›</span>');
     const route = gmapRoute(sch.map((x) => spotById[x.spot]), sch.some((x) => x.mode === "ride") ? "" : "walking");
-    $("#sheet-body").innerHTML = foundCard() + `<div class="chain">${chain}</div>
+    $("#sheet-body").innerHTML = foundCard() + `${decide ? `<div class="mk-decide-hint">${IC.clock}<span>時間を決めて、いちばん下の「決定」を押すと、そのままたどり始めます</span></div>` : ""}<div class="chain">${chain}</div>
       <div class="mk-bar">
         <label class="mk-start" title="出発の時刻">${IC.clock}<span>出発</span><input type="time" class="time-in" id="mk-start" value="${R.fmt(d.start)}" step="300"></label>
         <a class="tool-btn" href="${route}" target="_blank" rel="noopener" title="この順番で Google マップを開く">${IC.pin}<span>Google</span></a>
@@ -1068,9 +1083,10 @@
       <div class="mk-list">${stopItems(d, sch)}</div>
       <div class="mk-tip">${ICON.grip}をつかむか、地図の番号を長押しで並べ替え</div>
       ${d.from ? `<div class="mk-tip">元の記事：${esc(recById[d.from].title)}</div>` : ""}
-      <div class="mk-save"><input class="field" id="mk-name" placeholder="予定の名前" value="${esc(d.name)}" aria-label="予定の名前"><button class="btn primary" data-mk="save">${IC.save}${d.id ? "上書き" : "保存"}</button></div>
+      <div class="mk-save"><input class="field" id="mk-name" placeholder="予定の名前" value="${esc(d.name)}" aria-label="予定の名前">${decide ? "" : `<button class="btn primary" data-mk="save">${IC.save}${d.id ? "上書き" : "保存"}</button>`}</div>
       ${budgetLine(budgetOf(d.stops), sch)}
-      ${d.id && !d.dirty ? `<div class="saved-note">${IC.check}<span>保存しました</span><button class="link-btn" data-mk="follow">${IC.route}この予定をたどる</button></div>` : ""}`;
+      ${!decide && d.id && !d.dirty ? `<div class="saved-note">${IC.check}<span>保存しました</span><button class="link-btn" data-mk="follow">${IC.route}この予定をたどる</button></div>` : ""}
+      ${decide ? `<button class="btn accent block mk-decide" data-mk="decide">${IC.check}決定</button>` : ""}`;
     sortableStops(d);
   }
 
@@ -1108,11 +1124,12 @@
       }
       $("#sheet-body").innerHTML = `<div class="section-label">たどる予定を選んでください</div>` + state.plans.map((p) => {
         const sch = schedule(p.start, p.stops), on = state.plan && state.plan.planId === p.id;
-        return `<div class="plan-card ${on ? "on" : ""}" data-fl="pick" data-id="${p.id}">
-          <div class="row-between"><b class="pn">${esc(p.name)}</b>${on ? '<span class="badge fav">たどっている途中</span>' : ""}</div>
-          <div class="meta"><span>${IC.pin}${p.stops.length}か所</span><span>${IC.clock}${R.fmt(sch[0].arrive)}–${R.fmt(sch[sch.length - 1].depart)}</span><span title="記事の値段の合計（交通費は別）">${IC.yen}${budgetText(p.budget || budgetOf(p.stops)).replace("予算の目安 ", "")}</span></div>
+        const timed = p.timed !== false; // false：順番だけで保存した予定（押すと、時間を決める画面）
+        return `<div class="plan-card ${on ? "on" : ""} ${timed ? "" : "untimed"}" data-fl="pick" data-id="${p.id}">
+          <div class="row-between"><b class="pn">${esc(p.name)}</b>${!timed ? `<span class="badge untimed">${IC.clock}時間未調整</span>` : on ? '<span class="badge fav">たどっている途中</span>' : ""}</div>
+          <div class="meta"><span>${IC.pin}${p.stops.length}か所</span>${timed ? `<span>${IC.clock}${R.fmt(sch[0].arrive)}–${R.fmt(sch[sch.length - 1].depart)}</span>` : `<span>時間はまだ決めていません</span>`}<span title="記事の値段の合計（交通費は別）">${IC.yen}${budgetText(p.budget || budgetOf(p.stops)).replace("予算の目安 ", "")}</span></div>
           <div class="small chain-text">${p.stops.map((s, i) => `${i + 1} ${esc(spotById[s.spot].name)}`).join(" › ")}</div>
-          <div class="row"><button class="btn small accent" data-fl="pick" data-id="${p.id}">${IC.route}${on ? "続きから" : "たどる"}</button><button class="mini-btn" data-fl="edit" data-id="${p.id}" title="つくるで直す">${IC.edit}直す</button><button class="mini-btn danger only-ic" data-fl="del" data-id="${p.id}" aria-label="消す" title="消す">${IC.trash}</button></div>
+          <div class="row"><button class="btn small accent" data-fl="pick" data-id="${p.id}">${timed ? `${IC.route}${on ? "続きから" : "たどる"}` : `${IC.clock}時間を決める`}</button><button class="mini-btn" data-fl="edit" data-id="${p.id}" title="つくるで直す">${IC.edit}直す</button><button class="mini-btn danger only-ic" data-fl="del" data-id="${p.id}" aria-label="消す" title="消す">${IC.trash}</button></div>
         </div>`;
       }).join("");
       return;
@@ -1360,31 +1377,43 @@
       toast(`${fresh.length}か所を予定の後ろに足しました`);
     } else {
       if (d.stops.length && d.dirty && !confirm("つくりかけの予定を、この記事のルートで置き換えますか？")) return;
-      state.draft = newDraft({ name: r.type === "route" ? r.title : "", start: R.toMin(r.start || "10:00"), stops: add, from: r.id });
+      state.draft = newDraft({ name: r.type === "route" ? r.title : "", start: R.toMin(r.start || "10:00"), stops: add, from: r.id, simple: true }); // まずは回る順番だけ
       toast(`${w.name}さんの${r.type === "route" ? "ルート" : "場所"}を入れました`);
     }
     if (!(how === "append" && stage() === "redo")) state.planMode = "make";
     state.fitNext = true;
     switchView("plan");
   }
-  function saveDraft() {
+  function saveDraft(quiet) {
     const d = state.draft;
-    if (!d.stops.length) { toast("場所を1つ以上入れてください"); return; }
+    if (!d.stops.length) { toast("場所を1つ以上入れてください"); return false; }
     if (!d.name.trim()) {
       setSheet("full"); toast("予定の名前を入れてください");
       setTimeout(() => { const f = $("#mk-name"); if (f) f.focus(); }, 300);
-      return;
+      return false;
     }
     // 保存するときに、記事の値段から予算の目安を出して、予定といっしょに残す
     const budget = budgetOf(d.stops);
-    const plan = { id: d.id || "p" + Date.now(), name: d.name.trim(), start: d.start, stops: d.stops.map((s) => ({ ...s })), from: d.from, budget };
+    // timed：時間の画面（いつもの つくる）で決めたか。順番だけの画面で保存したら false で、たどる前に時間を決める
+    const plan = { id: d.id || "p" + Date.now(), name: d.name.trim(), start: d.start, stops: d.stops.map((s) => ({ ...s })), from: d.from, budget, timed: !d.simple };
     const i = state.plans.findIndex((p) => p.id === plan.id);
     if (i >= 0) state.plans[i] = plan; else state.plans.unshift(plan);
     // たどっている途中の予定を直したときは、たどる側も新しい予定にする
     if (state.plan && state.plan.planId === plan.id) state.plan = null;
     d.id = plan.id; d.dirty = false;
-    toast(`${i >= 0 ? "上書き保存しました" : "保存しました"}。${budgetText(budget)}`);
+    if (quiet) return true;
+    toast(d.simple ? `${i >= 0 ? "上書き保存しました" : "保存しました"}（時間は、たどる前に決めます）` : `${i >= 0 ? "上書き保存しました" : "保存しました"}。${budgetText(budget)}`);
     renderSheet();
+    return true;
+  }
+  // 時間を決めた予定を保存して、そのままたどり始める（たどるで、時間をまだ決めていない予定を選んだときの「決定」）
+  function decideDraft() {
+    const d = state.draft;
+    d.simple = false;
+    if (!saveDraft(true)) return;
+    d.decide = false;
+    startFollow(d.id, true);
+    toast("この時間で、たどり始めます");
   }
   function onMake(t) {
     const d = ed(), mk = t.dataset.mk, i = Number(t.dataset.i);
@@ -1393,6 +1422,8 @@
     if (mk === "redo-auto") return autoRedo();
     if (i < lockN(d)) return; // いまいる場所は動かせない
     if (mk === "save") return saveDraft();
+    if (mk === "detail") { d.simple = false; renderSheet(); drawMap(false); return; } // 順番だけの画面 → 時間・滞在まで決める画面
+    if (mk === "decide") return decideDraft();
     if (mk === "expand") return setSheet("full");
     if (mk === "order") return openOrderPicker(i);
     if (mk === "follow") return startFollow(d.id);
@@ -1416,6 +1447,7 @@
   function startFollow(planId, reset) {
     const p = state.plans.find((x) => x.id === planId);
     if (!p) return;
+    if (p.timed === false) { editPlan(planId, true); return; } // 時間をまだ決めていない → 時間を決める画面（最後の「決定」でたどり始める）
     if (reset || !state.plan || state.plan.planId !== planId) {
       // はじめは 1 に向かっているところから（着いたら「ついた」を押す。本番は位置情報で自動）
       state.plan = { planId, title: p.name, stops: schedule(p.start, p.stops), cur: 0, phase: "go", from: null };
@@ -1424,12 +1456,12 @@
     state.planMode = "follow"; state.followList = false; state.fitNext = true; state.sheetBy.follow = "half";
     switchView("plan");
   }
-  function editPlan(planId) {
+  function editPlan(planId, decide) {
     const p = state.plans.find((x) => x.id === planId);
     if (!p) return;
     const d = state.draft;
     if (d.dirty && d.stops.length && d.id !== planId && !confirm("つくりかけの予定を、この予定で置き換えますか？")) return;
-    state.draft = newDraft({ id: p.id, name: p.name, start: p.start, stops: p.stops.map((s) => ({ ...s })), from: p.from });
+    state.draft = newDraft({ id: p.id, name: p.name, start: p.start, stops: p.stops.map((s) => ({ ...s })), from: p.from, decide: !!decide });
     state.planMode = "make"; state.fitNext = true;
     switchView("plan");
   }
