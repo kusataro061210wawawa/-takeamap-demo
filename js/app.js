@@ -1077,11 +1077,12 @@
   /* 組み直し（自分で選ぶ）：いまいる場所のあとを、つくると同じように地図で選び直す */
   function renderRedoSheet() {
     const rd = state.redo, d = rd.d, lk = lockN(d), sch = schedule(d.start, d.stops), n = sch.length - lk;
-    const left = state.premium ? "無制限" : `残り${V.rebuildsLeft}回`;
+    // 方針（SPEC.md）：自分で選ぶ組み直しは何回でも。回数があるのは「おまかせ」だけ（月5回まで。有料会員は何回でも）
+    const left = state.premium ? "何回でも" : `残り${V.rebuildsLeft}回`;
     const canAuto = state.premium || V.rebuildsLeft > 0;
     const note = rd.auto
-      ? (state.premium ? "有料会員：おまかせは無制限" : `おまかせを使ったので、この予定にすると今月の残りは${V.rebuildsLeft - 1}回（無料は月5回）`)
-      : "自分で選ぶ組み直しは、回数に数えません";
+      ? (state.premium ? "有料会員：おまかせは何回でも使えます" : `おまかせを使ったので、この予定にすると今月のおまかせは残り${V.rebuildsLeft - 1}回（月5回まで）`)
+      : "自分で選ぶ組み直しは、何回でも使えます（回数に数えません）";
     // 次に押した場所が入る番号（いまの場所のすぐあと。続けて押すと、その次）
     const ins = Math.min(Math.max(d.ins == null ? lk : d.ins, lk), d.stops.length);
     $("#sheet-head").innerHTML = `<b>組み直す</b><small>${n ? `このあと${n}か所・〜${R.fmt(sch[sch.length - 1].depart)}` : "このあとの予定がありません"}</small>`;
@@ -1129,11 +1130,11 @@
     const outdoor = pl.stops.filter((s, i) => i >= pl.cur && live(s) && !spotById[s.spot].indoor).length;
     if (state.rain && !state.rainHandled) alerts.push([IC.rain, `<b>雨が降り出しました</b>${outdoor ? `このあと屋外の場所が${outdoor}か所あります` : "このあとの場所は屋内です"}`]);
     if (state.delay) alerts.push([IC.delay, `<b>${state.delay}分遅れています</b>閉まる時間に間に合うように並べ直せます`]);
-    const left = state.premium ? "無制限" : `残り${V.rebuildsLeft}回`;
+    const left = state.premium ? "何回でも" : `残り${V.rebuildsLeft}回`;
     const canRebuild = state.premium || V.rebuildsLeft > 0;
     const redo = ph === "end" ? "" : `<div class="fl-redo ${alerts.length ? "hot" : ""}">
-        ${canRebuild ? `<button class="fl-rb auto" data-act="rebuild">${IC.spark}<span><b>おまかせ</b><small>${left}</small></span></button>` : `<button class="fl-rb auto" data-act="premium">${IC.spark}<span><b>有料会員に</b><small>無制限・初月無料</small></span></button>`}
-        <button class="fl-rb self" data-fl="redo">${IC.pin}<span><b>自分で選ぶ</b><small>いつでも無料</small></span></button>
+        ${canRebuild ? `<button class="fl-rb auto" data-act="rebuild">${IC.spark}<span><b>おまかせ</b><small>${left}</small></span></button>` : `<button class="fl-rb auto" data-act="premium" title="有料会員（月500円・初月無料）：おまかせが何回でも使え、予定の店の臨時休業・雨・路線の遅延を見張って通知します">${IC.spark}<span><b>有料会員</b><small>おまかせ何回でも・通知</small></span></button>`}
+        <button class="fl-rb self" data-fl="redo">${IC.pin}<span><b>自分で選ぶ</b><small>何回でも</small></span></button>
       </div>`;
     // 時間割。場所ごとに「ついた」「でた」。でたあと次の場所に ついた を押すまでは、そのあいだを「移動中」で強調する
     const items = pl.stops.map((s, i) => {
@@ -1456,7 +1457,7 @@
     if (act === "write") return openWrite(true);
     if (act === "d-reset") return startFollow(pl.planId, true);
     if (act === "rebuild") return doRebuild();
-    if (act === "premium") { state.premium = true; toast("デモ：有料会員（初月無料）になりました"); renderSheet(); return; }
+    if (act === "premium") { state.premium = true; toast("デモ：有料会員（月500円・初月無料）になりました。おまかせが何回でも使えます。本番では、休業・雨・遅延を見張って知らせます"); renderSheet(); return; }
     // デモのアイコン：いま選んでいる場所（移動中なら次に行く場所）で起きたことにする。もう一度押すと取り消す
     const where = `${pl.cur + 1} ${spotById[cur.spot].name}`;
     if (act === "d-closed") {
@@ -1545,7 +1546,7 @@
   }
   // おまかせ：いま選んでいる場所を、趣味の合う人の記録で直した結果を入れる（臨時休業・雨・営業時間）
   function autoRedo() {
-    if (!state.premium && V.rebuildsLeft <= 0) { toast("今月のおまかせは使い切りました"); return; }
+    if (!state.premium && V.rebuildsLeft <= 0) { toast("今月のおまかせは使い切りました。自分で選ぶ組み直しは何回でも使えます"); return; }
     const pl = state.plan, rd = state.redo, d = rd.d, sch = schedule(d.start, d.stops), lk = lockN(d);
     let base;
     if (rd.kind === "at") base = [...pl.stops.slice(0, pl.cur + 1), ...sch.slice(1)];
@@ -1749,7 +1750,7 @@
     const appending = editing() && (redoing || state.draft.stops.length > 0);
     const have = appending ? new Set([...ed().stops.map((x) => x.spot), ...(redoing ? redoUsed() : [])]) : new Set();
     const fresh = appending ? r.spots.filter((s) => !have.has(s.spot)).length : n;
-    const ctaLabel = appending ? (!fresh ? "この記事の場所は、もう予定に入っています" : n > 1 ? `このルートを予定の後ろに足す（${fresh}か所）` : "この場所を予定に足す") : (n > 1 ? "このルートで予定をつくる（無料）" : "この場所から予定をつくる");
+    const ctaLabel = appending ? (!fresh ? "この記事の場所は、もう予定に入っています" : n > 1 ? `このルートを予定の後ろに足す（${fresh}か所）` : "この場所を予定に足す") : (n > 1 ? "このルートで予定をつくる" : "この場所から予定をつくる");
     const cta = pv ? "" : `<div class="sticky-cta"><button class="btn accent block" id="make-btn" ${appending && !fresh ? "disabled" : ""}>${ICON.calplus}${ctaLabel}</button>${appending ? `<div class="small" style="text-align:center;margin-top:6px">${redoing ? "組み直している予定" : `つくっている予定（${state.draft.stops.length}か所）`}の後ろに足します</div>` : ""}</div>`;
     const mmId = pv ? "mm-art-pv" : "mm-art";
     // いいね：読む人には数を出さず、その人が付けたかどうかだけ。書いた人には「行った」と「いいね」の数
@@ -1905,7 +1906,7 @@
       }
       return html;
     }).join("");
-    const left = state.premium ? "有料会員：組み直しは無制限" : `この予定にすると、今月の残りは${V.rebuildsLeft - 1}回（無料は月5回）`;
+    const left = state.premium ? "有料会員：おまかせは何回でも使えます" : `この予定にすると、今月のおまかせは残り${V.rebuildsLeft - 1}回（月5回まで）`;
     p.innerHTML = bar("組み直しました") + `<div class="pad">
       <div class="small">条件：${state.closed.length ? "臨時休業・" : ""}${state.rain ? "雨・" : ""}${state.delay ? state.delay + "分の遅れ・" : ""}営業時間・歩く距離</div>
       <div class="h1">趣味の合う人の記録から、午後の予定を並べ直しました</div>
@@ -2152,7 +2153,7 @@
           <div class="stat"><b>${allSpots.length}</b><span>行った場所</span></div>
           <div class="stat"><b>${V.saved.length}</b><span>登録した場所</span></div>
         </div>
-        <div class="small">組み直し：${state.premium ? "有料会員（無制限）" : `今月の残り${V.rebuildsLeft}回（無料は月5回）`}・保存した予定 ${state.plans.length}件</div>
+        <div class="small">${state.premium ? "有料会員：おまかせが何回でも・休業や雨、遅延の通知" : `おまかせ：今月の残り${V.rebuildsLeft}回（月5回まで）。自分で選ぶ組み直しは何回でも`}<br>保存した予定 ${state.plans.length}件</div>
         <div class="section-label">自分の地図</div>
         <div class="mymap-preview">
           <div class="minimap" id="mm-me"></div>
@@ -3541,7 +3542,9 @@
   function foundSpot(p) {
     const same = D.spots.find((sp) => kana(sp.name) === kana(p.name) && R.distM(sp, p) < 120);
     if (same) return same;
-    const sp = { id: "f" + Date.now().toString(36), name: p.name, lat: p.lat, lng: p.lng, kind: p.kind || "場所", tags: [], indoor: p.indoor !== false, hours: null, price: null, addr: p.addr || "", temp: true, src: p.src };
+    const sp = { id: "f" + Date.now().toString(36), name: p.name, lat: p.lat, lng: p.lng, kind: p.kind || "場所", tags: [], indoor: p.indoor !== false, hours: null, price: null, addr: p.addr || "", temp: true, src: p.src, gid: p.src === "google" && p.pp ? p.pp.placeId : null };
+    // gid：Google の place_id。方針（SPEC.md）で、Google の場所の情報は保存せず、残してよいのは place_id だけ。
+    // 試作ではこの端末のメモリの中だけに置く。本番で記事に入れて登録するときは、place_id と書き手が入れた場所の情報だけを残す
     D.spots.push(sp); spotById[sp.id] = sp;
     return sp;
   }
@@ -3578,21 +3581,21 @@
       const q = st.q.trim();
       local = localMatches(q, c);
       if (!q) {
-        out.innerHTML = `<div class="ps-hint">${IC.pin}<div><b>記事のある場所</b>は、打つとすぐ出ます。<br><b>記事のない場所</b>（初めて行く所・コンビニ・ホテルなど）は「探す」で地図から探します（無料）。<br>それでも見つからないときは、Google でも探せます。</div></div>`;
+        out.innerHTML = `<div class="ps-hint">${IC.pin}<div><b>記事のある場所</b>は、打つとすぐ出ます。<br><b>記事のない場所</b>（初めて行く所・コンビニ・ホテルなど）は「探す」で地図から探します。<br>それでも見つからないときは、Google でも探せます。</div></div>`;
         return;
       }
       let h = `<div class="ps-lb">記事のある場所 <span>${local.length}件</span></div>`;
       h += local.length ? local.map((sp, i) => row(`app:${i}`, "app", sp.name, `${sp.kind}${sp.addr ? "・" + sp.addr : ""}`, `記事${recsAt(sp.id).length}`)).join("") : '<div class="ps-none">ありません</div>';
-      h += '<div class="ps-lb">地図の場所 <span>OpenStreetMap・無料</span></div>';
+      h += '<div class="ps-lb">地図の場所 <span>OpenStreetMap</span></div>';
       if (st.osmBusy) h += '<div class="ps-none">探しています…</div>';
       else if (st.osmErr) h += `<div class="ps-none">${esc(st.osmErr)}</div>`;
       else if (st.osm) h += st.osm.length ? st.osm.map((p, i) => row(`osm:${i}`, "osm", p.name, `${p.kind}${p.addr ? "・" + p.addr : ""}`, distText(p.dist))).join("") + '<div class="ps-attr">© OpenStreetMap contributors</div>' : '<div class="ps-none">見つかりませんでした。名前を短くするか、Google で探してください</div>';
-      else h += `<button class="ps-more" data-ps="osm">${IC.search}<span>「${esc(q)}」を地図で探す<small>無料</small></span></button>`;
+      else h += `<button class="ps-more" data-ps="osm">${IC.search}<span>「${esc(q)}」を地図で探す<small>OpenStreetMap で探します</small></span></button>`;
       h += '<div class="ps-lb">Google <span>見つからないときだけ</span></div>';
       if (st.gBusy) h += '<div class="ps-none">探しています…</div>';
       else if (st.gErr) h += `<div class="ps-none">${esc(st.gErr)}</div>`;
       else if (st.g) h += st.g.length ? st.g.map((p, i) => row(`g:${i}`, "g", p.name, `${p.kind}${p.sub ? "・" + p.sub : ""}`, "")).join("") + '<div class="ps-attr">powered by Google</div>' : '<div class="ps-none">見つかりませんでした</div>';
-      else h += `<button class="ps-more g" data-ps="google">${IC.search}<span>Google で探す<small>押したときだけ Google の検索を使います（回数で料金がかかります）</small></span></button>`;
+      else h += `<button class="ps-more g" data-ps="google">${IC.search}<span>Google で探す<small>押したときだけ Google の検索を使います</small></span></button>`;
       out.innerHTML = h;
     }
     async function runOsm() {

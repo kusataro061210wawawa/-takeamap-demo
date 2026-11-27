@@ -1420,10 +1420,10 @@ html.sheet-dragging, html.sheet-dragging * { -webkit-user-select: none !importan
 .pin.off { width: 12px; height: 12px; background: #D3D8D4; border: 2px solid var(--paper); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
 
 /* ===== 2026-11-27（6回目）：いいねのふちを落ち着いた色に・♡の絞り込みを別のボタンに ===== */
-/* いいねした場所のふち：彩度を下げた明るいピンク。太さは白いふちと同じ（小さな灰色のピンは少し細く） */
-:root { --like-rim: #E784A8; }
-.pin.lk { border-color: var(--like-rim); border-width: 2.5px; }
-.pin.other.lk { border-width: 2px; }
+/* いいねした場所のふち：うすいピンクで、白いふち（2.5px）より細い 2px（小さな灰色のピンは 1.5px）。目立ちすぎないように */
+:root { --like-rim: #EFA7C1; }
+.pin.lk { border-color: var(--like-rim); border-width: 2px; }
+.pin.other.lk { border-width: 1.5px; }
 .pin-cluster.lk { border-color: var(--like-rim); }
 
 /* お気に入り／エキスパート／すべての人 と、その隣の ♡（重ねて使う） */
