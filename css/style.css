@@ -1373,11 +1373,7 @@ html.sheet-dragging, html.sheet-dragging * { -webkit-user-select: none !importan
 /* いいねした場所：ふちをピンクに（白いふちより少しだけ太く。うるさくならないよう、外の光はつけない） */
 .pin.lk { border-color: var(--like); border-width: 3px; }
 .pin.other.lk { border-width: 2.5px; }
-/* まだいいねしていない場所：ふちは白のまま、中の色をうすく（彩度を下げ、白をうすくかける） */
-.pin.nl { position: relative; filter: saturate(.4); }
-.pin.nl::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: rgba(255,255,255,.34); pointer-events: none; }
-.gm-mk:hover .pin.nl { filter: none; }
-.gm-mk:hover .pin.nl::after { opacity: 0; }
+/* まだいいねしていない場所は、ふつうの見え方のまま（2026-11-27 に、色をうすくするのをやめた） */
 
 /* 吹き出し：いいねした場所は名前の前に小さな ♥ */
 .bubble .blk { display: inline-flex; vertical-align: -1px; margin-right: 3px; color: var(--like); }

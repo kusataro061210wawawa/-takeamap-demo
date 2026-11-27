@@ -260,7 +260,7 @@
      2026-11-27 から場所ごと（V.likes：「記事の id|場所の id」）。ルートの記事は、場所ごとの ♡ でその場所だけに付けられ、
      記事の ♡（上と下）は、その記事の場所をまとめて付け外しする。こうすると、いくつもの場所をまとめた記事からも、場所ごとに取り出せる。
      いいねの数は読む人には見せない。書いた人だけが、自分の記事の「行った」と「いいね」の数（記事のどこかにいいねした人・場所ごとの人）を見られる。
-     地図では、いいねした場所のピンのふちをピンクにし、まだいいねしていない場所のピンは色をうすくする */
+     地図では、いいねした場所のピンのふちをピンクにする（まだいいねしていない場所は、ふつうの見え方のまま。2026-11-27 に色をうすくするのをやめた） */
   const lkKey = (r, spotId) => `${r.id}|${spotId}`;
   // はじめのデータ：liked は記事ごと（その記事の場所すべて）、likedSpots は場所ごと（「記事の id|場所の id」）
   V.likes = [...D.records.flatMap((r) => ((V.liked || []).includes(r.id) ? r.spots.map((x) => lkKey(r, x.spot)) : [])), ...(V.likedSpots || [])];
@@ -513,9 +513,9 @@
     groups.forEach((g) => addCluster(g, g.some((x) => lks.has(x.sp.id))));
     singles.forEach(({ rank, r, s, sp, color, fk, saved }) => {
       const kind = saved ? "saved" : r.official ? "official" : fk ? "fav" : "other";
-      // いいねした場所：ふちがピンク（lk）。まだの場所：ふちは白のまま、中の色をうすく（nl）。登録した場所の白いピンはそのまま
+      // いいねした場所：ふちがピンク（lk）。まだの場所は、ふつうの見え方のまま（2026-11-27 に、色をうすくするのをやめた）。登録した場所の白いピンはそのまま
       const lk = lks.has(sp.id), sel = !make && sp.id === state.place;
-      const cls = kind + (kind === "saved" ? "" : lk ? " lk" : " nl") + (sel ? " sel" : "");
+      const cls = kind + (kind !== "saved" && lk ? " lk" : "") + (sel ? " sel" : "");
       // 書いた人の絵：お気に入りはその人の色の上に、ほかの人は灰色の上に（2026-11-27。前はほかの人は灰色の点だけで、あおいさんなどの絵が出ていなかった）
       const wArt = r ? artSvg(writerById[r.writer]) || esc(initial(writerById[r.writer])[0]) : "";
       const icon = kind === "saved" ? divPin(cls, "") : kind === "official" ? divPin(cls, "公式") : kind === "fav" ? divPin(cls, wArt, `background:${color}`) : divPin(cls, wArt);
